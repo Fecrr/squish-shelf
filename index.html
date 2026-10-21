@@ -1,0 +1,2787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Squish 3D squishies on the shelf, or destroy them in the Destroy the Squishy room.">
+<meta name="theme-color" content="#efe8f6">
+<title>Squish Shelf</title>
+<style>
+  :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Creepster&family=DM+Mono:wght@400;500&family=Figtree:wght@400;600;800&display=swap">
+<style>
+/* Layout: full-bleed 3D stage, brand + stats float on top, one soft "squishy" control panel docked bottom-left (full width on phones). */
+:root {
+  --bg: #efe8f6;
+  --scene: #efe8f6;
+  --pedestal: #fbf8fe;
+  --ink: #2a2140;
+  --muted: #6e6487;
+  --line: #ddd2ec;
+  --panel: rgba(255, 255, 255, 0.74);
+  --panel-solid: #ffffff;
+  --chip: #f7f2fc;
+  --accent: #ff6b8f;
+  --accent-ink: #ffffff;
+  --accent-soft: #ffc2d1;
+  --shadow: rgba(72, 48, 110, 0.12);
+  --display: "Bagel Fat One", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1626; --scene: #1a1626; --pedestal: #2b2440; --ink: #f4effc; --muted: #a99fc2;
+    --line: #3a3152; --panel: rgba(36, 30, 54, 0.8); --panel-solid: #241e36; --chip: #2c2542;
+    --accent: #ff86a5; --accent-ink: #2a0f1a; --accent-soft: #6b2c41; --shadow: rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1626; --scene: #1a1626; --pedestal: #2b2440; --ink: #f4effc; --muted: #a99fc2;
+  --line: #3a3152; --panel: rgba(36, 30, 54, 0.8); --panel-solid: #241e36; --chip: #2c2542;
+  --accent: #ff86a5; --accent-ink: #2a0f1a; --accent-soft: #6b2c41; --shadow: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+#stage {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  display: block; touch-action: none; cursor: grab; outline: none;
+}
+#stage.squishing { cursor: grabbing; }
+
+.top {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: max(16px, env(safe-area-inset-left, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; flex-wrap: wrap; pointer-events: none;
+}
+.top > * { pointer-events: auto; }
+h1 {
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(30px, 5vw, 46px); line-height: 1; margin: 0;
+  letter-spacing: 0.01em; color: var(--ink);
+  text-shadow: 0 2px 0 var(--accent-soft);
+  text-wrap: balance;
+}
+.brand p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.4; max-width: 30ch; }
+.stats { display: flex; gap: 8px; align-items: center; }
+.pill {
+  font-family: var(--mono); font-size: 12px; line-height: 1;
+  padding: 9px 13px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+button { font: inherit; color: inherit; }
+button.pill { cursor: pointer; transition: transform .3s cubic-bezier(.3, 1.7, .5, 1); }
+button.pill:active { transform: scale(1.08, .86); }
+
+.hint {
+  position: fixed; margin: 0; transform: translateX(-50%);
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+  pointer-events: none; transition: opacity .6s ease;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.hint.gone { opacity: 0; }
+
+.panel {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(380px, calc(100% - 32px));
+  box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 28px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 40px var(--shadow);
+}
+.types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.type {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 6px 9px; border-radius: 20px;
+  border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+  font: 600 13px var(--body); cursor: pointer;
+  transition: transform .35s cubic-bezier(.3, 1.7, .5, 1), background-color .2s, color .2s;
+}
+.type:active { transform: scale(1.07, .86); }
+.type[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.type svg { width: 38px; height: 26px; display: block; }
+.type svg * { fill: currentColor; }
+
+.row-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 4px; min-width: 0; }
+h2 { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.1; margin: 0; min-width: 0; text-wrap: balance; }
+.toggle {
+  flex: none; font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
+  padding: 7px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--chip);
+  transition: transform .3s cubic-bezier(.3, 1.7, .5, 1);
+}
+.toggle:active { transform: scale(1.08, .86); }
+.toggle[aria-pressed="true"] { border-color: var(--ink); }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 9px; padding: 0 4px; }
+.sw {
+  width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  border: 3px solid var(--panel-solid); box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer; transition: transform .35s cubic-bezier(.3, 1.7, .5, 1), box-shadow .2s;
+}
+.sw:hover { transform: scale(1.08); }
+.sw:active { transform: scale(1.18, .82); }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+
+.specs {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+  margin: 0; padding: 11px 4px 2px; border-top: 1px dashed var(--line);
+}
+.specs dt { font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.specs dd { margin: 3px 0 0; font: 600 13px var(--body); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.grip { display: flex; gap: 8px; align-items: stretch; padding: 0 4px; }
+.seg { display: flex; flex: none; padding: 3px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; padding: 7px 12px; border-radius: 999px; font: 600 12px var(--body); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.squeeze {
+  flex: 1; min-width: 0; padding: 8px 10px; border-radius: 999px;
+  border: 2px dashed var(--accent); background: transparent; color: var(--ink);
+  font: 700 13px var(--body); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  transition: transform .35s cubic-bezier(.3, 1.7, .5, 1), background-color .2s, color .2s;
+}
+.squeeze[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-style: solid; transform: scale(1.05, .88); }
+
+.sndrow { display: flex; align-items: center; gap: 10px; padding: 0 4px; min-width: 0; }
+.sndlabel { flex: none; font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.seg.snd { flex: 1; min-width: 0; }
+.seg.snd button { flex: 1; min-width: 0; padding: 6px 4px; }
+
+#tips { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.tip {
+  position: absolute; left: 0; top: 0; border-radius: 50%;
+  background: radial-gradient(circle at 42% 36%, rgba(255, 255, 255, .5), rgba(255, 238, 230, .22) 58%, rgba(255, 255, 255, 0) 72%);
+  border: 2px solid rgba(255, 255, 255, .75);
+  box-shadow: 0 6px 18px rgba(60, 30, 80, .18);
+}
+.tip.palm { border-radius: 46% 46% 50% 50% / 40% 40% 60% 60%; }
+.tip.behind { opacity: .35; border-style: dashed; box-shadow: none; }
+
+[hidden] { display: none !important; }
+.go-hc { cursor: pointer; font: 400 15px "Creepster", "Chiller", fantasy, var(--display); letter-spacing: 0.06em; color: #f2e6e3; background: #7a0c16; border-color: #3b0509; box-shadow: 0 0 14px rgba(200, 20, 35, 0.35); }
+.hc {
+  --hc-bg: #0a0607; --hc-ink: #e9dcd6; --hc-muted: #8f7a74; --hc-panel: rgba(14, 7, 8, 0.86);
+  --hc-line: #3b1418; --hc-hot: #b3121f; --hc-on-hot: #fff1ee; --hc-ok: #7fa35a; --hc-warn: #c9861c;
+  --hc-scary: "Creepster", "Chiller", fantasy, var(--display);
+  --hc-flash-gun: #fff3d6; --hc-flash-boom: #ff9a3c;
+  --hc-blood: #e01b2f; --hc-blood-dark: #4a0710; --hc-blood-glow: rgba(255, 30, 50, 0.45);
+  position: fixed; inset: 0; pointer-events: none; color: var(--hc-ink); font-family: var(--body);
+}
+/* dark vignette with a faint blood tint at the edges */
+.hc::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.55) 78%, rgba(40, 0, 4, 0.85) 100%);
+}
+.hc-top {
+  position: absolute; top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+}
+.hc-left { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.hc-right { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.hc-left > *, .hc-right > * { pointer-events: auto; }
+.hc-btn {
+  font: 400 16px var(--hc-scary); letter-spacing: 0.06em; color: var(--hc-ink); background: var(--hc-panel);
+  border: 1px solid var(--hc-line); border-radius: 6px; padding: 8px 14px; cursor: pointer;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: transform .3s cubic-bezier(.3, 1.7, .5, 1);
+}
+.hc-btn:active { transform: scale(1.06, .88); }
+.hc-new { background: var(--hc-hot); color: var(--hc-on-hot); border-color: var(--hc-blood-dark); box-shadow: 0 0 18px var(--hc-blood-glow); }
+.hc-new.pulse { animation: hcpulse 1s ease-in-out infinite; }
+.hc-new:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+@keyframes hcpulse { 50% { transform: scale(1.08); } }
+.hc-h {
+  font-family: "Creepster", "Chiller", "Papyrus", fantasy, var(--display);
+  font-weight: 400; font-size: clamp(32px, 5.5vw, 56px); line-height: 0.95; margin: 0;
+  letter-spacing: 0.04em; color: var(--hc-blood); max-width: 12ch; text-wrap: balance;
+  text-shadow: 0 0 1px var(--hc-blood-dark), 0 2px 0 var(--hc-blood-dark), 0 4px 0 var(--hc-blood-dark), 0 0 18px var(--hc-blood-glow), 0 0 42px var(--hc-blood-glow);
+  animation: hcflicker 6s infinite steps(1);
+}
+@keyframes hcflicker { 0%, 100% { opacity: 1; } 92% { opacity: 1; } 93% { opacity: .55; } 94% { opacity: 1; } 96% { opacity: .7; } 97% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .hc-h { animation: none; } }
+.hc-status {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px;
+  background: var(--hc-panel); border: 1px solid var(--hc-line); font: 500 12px var(--mono);
+  font-variant-numeric: tabular-nums; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+#hc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.hc-meter { width: 120px; height: 8px; border-radius: 2px; background: var(--hc-line); overflow: hidden; }
+.hc-meter i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--hc-ok); transition: width .15s; }
+.hc-meter i[data-level="warn"] { background: var(--hc-warn); }
+.hc-meter i[data-level="bad"] { background: var(--hc-hot); }
+.hc-types { display: flex; padding: 3px; border-radius: 6px; background: var(--hc-panel); border: 1px solid var(--hc-line); }
+.hc-types button { border: 0; background: transparent; color: var(--hc-muted); font: 400 15px var(--hc-scary); letter-spacing: 0.06em; padding: 6px 11px; border-radius: 4px; cursor: pointer; }
+.hc-types button[aria-pressed="true"] { background: var(--hc-hot); color: var(--hc-on-hot); }
+.hc-dock {
+  position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.hc-hint { margin: 0; max-width: 100%; text-align: center; font: 500 12px var(--mono); color: var(--hc-muted); background: var(--hc-panel); border: 1px solid var(--hc-line); border-radius: 6px; padding: 7px 14px; }
+.hc-tools {
+  pointer-events: auto; display: flex; gap: 4px; padding: 6px; max-width: 100%; overflow-x: auto;
+  background: var(--hc-panel); border: 1px solid var(--hc-line); border-radius: 10px; box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); scrollbar-width: none;
+}
+.hc-tool {
+  position: relative; flex: none; width: 66px; height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--hc-ink); font: 400 14px var(--hc-scary); letter-spacing: 0.05em; cursor: pointer;
+  transition: transform .3s cubic-bezier(.3, 1.7, .5, 1), background-color .15s;
+}
+.hc-tool:hover { background: var(--hc-line); }
+.hc-tool:active { transform: scale(1.08, .86); }
+.hc-tool svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.hc-tool kbd { position: absolute; top: 4px; right: 7px; font: 500 9px var(--mono); color: var(--hc-muted); }
+.hc-tool[aria-pressed="true"] { background: var(--hc-hot); color: var(--hc-on-hot); box-shadow: inset 0 -3px 0 var(--hc-blood-dark), 0 0 16px var(--hc-blood-glow); }
+.hc-tool[aria-pressed="true"] kbd { color: var(--hc-on-hot); opacity: .75; }
+#hc-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: var(--hc-flash-gun); mix-blend-mode: screen; }
+#hc-flash[data-kind="boom"] { background: var(--hc-flash-boom); }
+#stage.hc-canvas { cursor: crosshair; }
+#stage.hc-canvas[data-tool="throw"] { cursor: grab; }
+#stage.hc-canvas.grabbing { cursor: grabbing; }
+@media (max-width: 700px) {
+  .hc-tool { width: 56px; height: 56px; font-size: 12px; }
+  .hc-meter { width: 80px; }
+}
+
+/* ---------- touch + small screens ---------- */
+button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.top, .panel, .hint, .hc-top, .hc-dock { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.panel { overscroll-behavior: contain; }
+@media (max-width: 700px) {
+  h1 { font-size: 30px; }
+  .brand p { display: none; }
+  .top { gap: 8px; }
+  .stats { width: 100%; flex-wrap: wrap; gap: 6px; }
+  .pill { padding: 8px 11px; font-size: 11px; }
+  .panel { right: max(16px, env(safe-area-inset-right, 0px)); width: auto; border-radius: 24px; padding: 12px; max-height: min(50vh, 420px); overflow-y: auto; gap: 9px; }
+  .type { padding: 8px 4px 7px; font-size: 12px; }
+  .types { gap: 6px; }
+  .type svg { width: 32px; height: 20px; }
+  h2 { font-size: 19px; }
+  .swatches { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px 4px 4px; }
+  .swatches::-webkit-scrollbar { display: none; }
+  .sw { flex: none; }
+  .seg button { padding: 7px 10px; }
+  .specs { padding-top: 8px; }
+  .hint { font-size: 11px; padding: 7px 12px; }
+
+  .hc-top { flex-direction: column; align-items: stretch; gap: 8px; }
+  .hc-left { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 10px; }
+  .hc-back .lbl { display: none; }
+  .hc-h { font-size: clamp(22px, 7.4vw, 30px); white-space: nowrap; max-width: none; }
+  .hc-status { grid-column: 1 / -1; justify-content: space-between; }
+  .hc-status #hc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .hc-meter { flex: 1; width: auto; min-width: 50px; }
+  .hc-right { justify-content: flex-start; gap: 6px; }
+  .hc-btn { font-size: 15px; padding: 7px 11px; }
+  .hc-types button { font-size: 15px; padding: 5px 10px; }
+  .hc-hint { font-size: 11px; padding: 6px 10px; }
+  .hc-tools { scroll-snap-type: x mandatory; }
+  .hc-tool { scroll-snap-align: start; }
+}
+/* phones held sideways: panel down the left, everything else on the right */
+@media (max-height: 520px) and (min-width: 560px) {
+  h1 { font-size: 26px; }
+  .brand p { display: none; }
+  .panel {
+    top: calc(env(safe-area-inset-top, 0px) + 10px); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    left: max(10px, env(safe-area-inset-left, 0px)); right: auto; width: min(340px, 44vw); max-height: none;
+    overflow-y: auto; gap: 8px; padding: 10px; border-radius: 20px;
+  }
+  .top { left: calc(max(10px, env(safe-area-inset-left, 0px)) + min(340px, 44vw) + 14px); top: calc(env(safe-area-inset-top, 0px) + 10px); }
+  .stats { flex-wrap: wrap; justify-content: flex-end; }
+  .pill { padding: 7px 10px; font-size: 11px; }
+  .type { padding: 6px 4px; font-size: 12px; } .type svg { width: 30px; height: 18px; }
+  .swatches { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .sw { flex: none; width: 30px; height: 30px; }
+
+  .hc-top { flex-wrap: nowrap; top: calc(env(safe-area-inset-top, 0px) + 8px); }
+  .hc-left { gap: 6px; }
+  .hc-h { font-size: 26px; white-space: nowrap; max-width: none; }
+  .hc-back .lbl { display: none; }
+  .hc-status { padding: 6px 10px; }
+  .hc-btn { font-size: 14px; padding: 6px 10px; }
+  .hc-types button { font-size: 14px; padding: 4px 8px; }
+  .hc-hint { display: none; }
+  .hc-dock { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+  .hc-tool { width: 54px; height: 50px; font-size: 12px; gap: 2px; }
+  .hc-tool svg { width: 22px; height: 22px; }
+}
+
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.nogl { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+
+<canvas id="stage" tabindex="0" aria-label="3D squishy. Press and hold on it to squeeze, drag the empty space to spin. Space bar squeezes it with both hands."></canvas>
+
+<header class="top">
+  <div class="brand">
+    <h1>Squish Shelf</h1>
+    <p>Pick a squishy, then press and hold to squeeze it.</p>
+  </div>
+  <div class="stats">
+    <button class="pill go-hc" id="go-hc" type="button">Destroy the Squishy</button>
+    <span class="pill" id="count" aria-live="polite">0 squishes</span>
+    <button class="pill" id="sound" type="button" aria-pressed="true">Sound on</button>
+  </div>
+</header>
+
+<div id="tips" aria-hidden="true"></div>
+<p class="hint" id="hint">Hold to squish · drag empty space to spin</p>
+
+<section class="panel" id="panel" aria-label="Choose a squishy">
+  <div class="types" role="tablist" aria-label="Squishy type">
+    <button class="type" id="t-bao" type="button" role="tab" data-type="bao" aria-selected="true">
+      <svg viewBox="0 0 38 26" aria-hidden="true"><path d="M5 17 C5 6 12 2 19 2 C26 2 33 6 33 17 Z"/><rect x="4" y="17" width="30" height="8" rx="2" opacity=".55"/></svg>
+      Bao bun
+    </button>
+    <button class="type" id="t-butter" type="button" role="tab" data-type="butter" aria-selected="false">
+      <svg viewBox="0 0 38 26" aria-hidden="true"><rect x="2" y="8" width="34" height="13" rx="4"/></svg>
+      Butter block
+    </button>
+    <button class="type" id="t-jelly" type="button" role="tab" data-type="jelly" aria-selected="false">
+      <svg viewBox="0 0 38 26" aria-hidden="true"><ellipse cx="19" cy="14" rx="12" ry="11"/></svg>
+      Jelly ball
+    </button>
+  </div>
+  <div class="row-head">
+    <h2 id="vname">Strawberry Sparkle</h2>
+    <button class="toggle" id="face" type="button" aria-pressed="true">Face on</button>
+    <button class="toggle" id="reshape" type="button" hidden>Roll it round</button>
+  </div>
+  <div class="grip">
+    <div class="seg" role="group" aria-label="Finger style">
+      <button id="g-poke" type="button" data-grip="poke" aria-pressed="true">Poke</button>
+      <button id="g-pinch" type="button" data-grip="pinch" aria-pressed="false">Pinch</button>
+    </div>
+    <button id="squeeze" class="squeeze" type="button" aria-pressed="false">Hold for 2 hands</button>
+  </div>
+  <div class="sndrow">
+    <span class="sndlabel" id="snd-label">Sound</span>
+    <div class="seg snd" role="group" aria-labelledby="snd-label">
+      <button type="button" data-snd="soft" aria-pressed="false">Soft</button>
+      <button type="button" data-snd="wet" aria-pressed="false">Wet</button>
+      <button type="button" data-snd="crunch" aria-pressed="false">Crunch</button>
+      <button type="button" data-snd="squeak" aria-pressed="false">Squeak</button>
+    </div>
+  </div>
+  <div class="swatches" id="swatches" role="group" aria-label="Colors"></div>
+  <dl class="specs">
+    <div><dt id="k0">Rise</dt><dd id="v0">Slow</dd></div>
+    <div><dt id="k1">Size</dt><dd id="v1">7 cm</dd></div>
+    <div><dt id="k2">Scent</dt><dd id="v2">Milk bun</dd></div>
+    <div><dt>Last rise</dt><dd id="last">–</dd></div>
+  </dl>
+</section>
+
+<div class="hc" id="hc" hidden>
+  <div class="hc-top">
+    <div class="hc-left">
+      <button class="hc-btn hc-back" id="hc-back" type="button" aria-label="Back to shelf"><span aria-hidden="true">←</span><span class="lbl"> Back to shelf</span></button>
+      <h1 class="hc-h">Destroy the Squishy</h1>
+      <div class="hc-status" aria-live="polite">
+        <span id="hc-name">Strawberry Sparkle</span>
+        <span class="hc-meter"><i id="hc-fill"></i></span>
+        <span id="hc-pct">100%</span>
+      </div>
+    </div>
+    <div class="hc-right">
+      <div class="hc-types" role="group" aria-label="Squishy to add">
+        <button type="button" data-type="bao">Bao</button>
+        <button type="button" data-type="butter">Butter</button>
+        <button type="button" data-type="jelly">Jelly</button>
+      </div>
+      <button class="hc-btn hc-new" id="hc-new" type="button">New squishy</button>
+      <button class="hc-btn" id="hc-clean" type="button">Clean room</button>
+      <button class="hc-btn" id="hc-sound" type="button">Sound on</button>
+    </div>
+  </div>
+  <div class="hc-dock">
+    <p class="hc-hint" id="hc-hint">Click to shoot.</p>
+    <div class="hc-tools" role="toolbar" aria-label="Weapons">
+      <button class="hc-tool" type="button" data-tool="pin" aria-pressed="false"><kbd>1</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="7" r="3.2"/><path d="M9.3 9.3L20 20"/></svg>Pin</button>
+      <button class="hc-tool" type="button" data-tool="pistol" aria-pressed="false"><kbd>2</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h17v4h-8l-1.5 2H9l-1 6H4.5l1-8H3z"/><path d="M10.5 13l1 2"/></svg>Pistol</button>
+      <button class="hc-tool" type="button" data-tool="shotgun" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9h20v2.5H12l-2 4H6.5l1-4H2z"/><path d="M15 11.5v2h3"/></svg>Shotgun</button>
+      <button class="hc-tool" type="button" data-tool="bazooka" aria-pressed="false"><kbd>4</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 10h17v4H2z"/><path d="M19 9l3-1v8l-3-1"/><path d="M8 14l-1 4h3l1-4"/><path d="M5 10V8h3v2"/></svg>Bazooka</button>
+      <button class="hc-tool" type="button" data-tool="hammer" aria-pressed="false"><kbd>5</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h10v5H4z"/><path d="M14 5.5h3l2 2"/><path d="M9 9v12"/></svg>Hammer</button>
+      <button class="hc-tool" type="button" data-tool="axe" aria-pressed="false"><kbd>6</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21L15 10"/><path d="M12 5c4-1 8 2 8 7l-4 .5L11.5 8z"/></svg>Axe</button>
+      <button class="hc-tool" type="button" data-tool="flame" aria-pressed="false"><kbd>7</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c-3.5 0-6-2.6-6-6 0-4 3.5-6 3.5-10 3 1.7 4.5 4 4.5 6.5.8-.7 1.2-1.7 1.2-3C17.5 10.3 18 12.6 18 15c0 3.4-2.5 6-6 6z"/></svg>Flamer</button>
+      <button class="hc-tool" type="button" data-tool="throw" aria-pressed="false"><kbd>8</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12V6.5a1.5 1.5 0 013 0V11m0-5.5a1.5 1.5 0 013 0V11m0-4a1.5 1.5 0 013 0v5m0-2a1.5 1.5 0 013 0V15c0 4-3 6.5-6.5 6.5h-1c-2.6 0-4.4-1.4-5.5-3.5l-2-4a1.5 1.5 0 012.6-1.5L7 14"/></svg>Throw</button>
+      <button class="hc-tool" type="button" data-tool="cracker" aria-pressed="false"><kbd>9</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="10" width="7" height="11" rx="1.2"/><path d="M11 10c0-3 2-4.5 4.5-5"/><path d="M18 2.5v2M20.5 5h-2M19.8 3.2l-1.3 1.3"/></svg>Cracker</button>
+    </div>
+  </div>
+  <div id="hc-flash"></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (s) => document.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('squish:' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('squish:' + k, JSON.stringify(v)); } catch {} },
+};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- catalogue ---------- */
+const TYPES = {
+  bao: {
+    specs: [['Rise', 'Slow'], ['Size', '7 cm'], ['Scent', 'Milk bun']],
+    phys: { mode: 'slow', tau: 1.25, R: 0.55, max: 0.36, bulge: 0.35, inflate: 0.05 },
+    needW: 2.6, needH: 3.1, lookY: -0.1, sound: 'bao',
+    presets: [
+      { name: 'Strawberry Sparkle', base: '#f2a0b3', glitter: ['#ffffff', '#ffd6e0', '#ff6f96', '#ffe9a8'], css: 'radial-gradient(circle at 32% 30%, #fff 0 7%, transparent 8%), radial-gradient(circle at 66% 62%, #ffe9a8 0 6%, transparent 7%), #f2a0b3' },
+      { name: 'Pearl Milk', base: '#f3f1f6', irid: true, css: 'linear-gradient(135deg, #fdfcff, #e4e0f2 45%, #d6f0ec 70%, #f7e4ef)' },
+      { name: 'Calamansi', grad: ['#f4e45c', '#93d16a'], css: 'linear-gradient(180deg, #f4e45c, #93d16a)' },
+      { name: 'Silver Moon', base: '#aeb8c6', glitter: ['#ffffff', '#e7eef8', '#7f8a9b'], css: 'radial-gradient(circle at 34% 36%, #fff 0 7%, transparent 8%), radial-gradient(circle at 64% 58%, #e7eef8 0 6%, transparent 7%), #aeb8c6' },
+      { name: 'Blueberry', base: '#2f4c9c', glitter: ['#7d9cf0', '#b6c7f7'], sparse: true, css: 'radial-gradient(circle at 60% 40%, #b6c7f7 0 6%, transparent 7%), #2f4c9c' },
+      { name: 'Choco Glitter', base: '#7a4a24', glitter: ['#e9b85c', '#ffd98a', '#a86a32'], dense: true, css: 'radial-gradient(circle at 34% 34%, #ffd98a 0 7%, transparent 8%), radial-gradient(circle at 64% 64%, #e9b85c 0 6%, transparent 7%), #7a4a24' },
+      { name: 'Golden Custard', base: '#d8ad3c', metal: 0.55, css: 'linear-gradient(135deg, #f4d77a, #c99a2a)' },
+      { name: 'Matcha Sprinkle', base: '#7d8848', glitter: ['#e8f0c0', '#ffffff', '#4d5a26'], css: 'radial-gradient(circle at 36% 34%, #e8f0c0 0 7%, transparent 8%), radial-gradient(circle at 62% 62%, #fff 0 5%, transparent 6%), #7d8848' },
+    ],
+  },
+  butter: {
+    specs: [['Rise', 'Super slow'], ['Size', '10 cm'], ['Scent', 'Vanilla']],
+    phys: { mode: 'slow', tau: 2.0, R: 0.45, max: 0.25, bulge: 0.16, inflate: 0.03, pin: 0.12 },
+    needW: 3.0, needH: 1.9, lookY: -0.3, sound: 'butter',
+    presets: [
+      { name: 'Salted Butter', base: '#f7ec9c', ink: '#2a6fd6', word: 'SALTED', css: '#f7ec9c' },
+      { name: 'Honey Butter', base: '#f5d572', ink: '#b0650f', word: 'HONEY', css: '#f5d572' },
+      { name: 'Garlic Herb', base: '#f2e9b4', ink: '#3f8a4a', word: 'GARLIC HERB', flecks: ['#5f9a4c', '#3f7a35', '#8bb86a'], css: 'radial-gradient(circle at 35% 40%, #5f9a4c 0 8%, transparent 9%), radial-gradient(circle at 65% 62%, #3f7a35 0 7%, transparent 8%), #f2e9b4' },
+      { name: 'Strawberry Butter', base: '#f9c1cc', ink: '#d9365e', word: 'STRAWBERRY', css: '#f9c1cc' },
+      { name: 'Ube Butter', base: '#c9b2e6', ink: '#5b3a9a', word: 'UBE', css: '#c9b2e6' },
+    ],
+  },
+  jelly: {
+    specs: [['Rise', 'None'], ['Size', '6 cm'], ['Fill', 'Soft gel']],
+    phys: { mode: 'plastic', R: 0.55, max: 0.28, bulge: 0.25, inflate: 0 },
+    needW: 2.4, needH: 2.6, lookY: 0.0, sound: 'jelly', noFace: true,
+    presets: [
+      { name: 'Sky Jelly', base: '#8ccbf3', css: 'radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 30%), #8ccbf3' },
+      { name: 'Peach Jelly', base: '#f6a2b6', css: 'radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 30%), #f6a2b6' },
+      { name: 'Lilac Jelly', base: '#bba3f0', css: 'radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 30%), #bba3f0' },
+      { name: 'Mint Jelly', base: '#93e3c3', css: 'radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 30%), #93e3c3' },
+      { name: 'Crystal Clear', base: '#e8f3fb', css: 'radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 30%), #dfeaf3' },
+    ],
+  },
+};
+
+const state = {
+  type: store.get('type', 'bao'),
+  pick: store.get('pick', { bao: 0, butter: 0, jelly: 0 }),
+  face: store.get('face', true),
+  sound: store.get('sound', true),
+  count: store.get('count', 0),
+  sndStyle: ['soft', 'wet', 'crunch', 'squeak'].includes(store.get('snd', 'wet')) ? store.get('snd', 'wet') : 'wet',
+};
+if (!TYPES[state.type]) state.type = 'bao';
+
+/* ---------- renderer ---------- */
+const canvas = $('#stage');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  document.body.insertAdjacentHTML('beforeend', '<p class="nogl">This page needs WebGL to show the 3D squishies. Try a recent Chrome, Safari or Firefox.</p>');
+  throw e;
+}
+const coarse = matchMedia('(pointer: coarse)').matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, coarse ? 1.5 : 2));
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#efe8f6');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.85;
+
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+const camTarget = new THREE.Vector3(0, -0.1, 0);
+const camDir = new THREE.Vector3(0, 0.36, 1).normalize();
+let camDist = 7, camDistTarget = 7, lookYTarget = -0.1;
+
+scene.add(new THREE.HemisphereLight('#ffffff', '#cbbbe0', 0.5));
+const sun = new THREE.DirectionalLight('#ffffff', 1.5);
+sun.position.set(2.5, 5.5, 3.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 15 });
+sun.shadow.radius = 6;
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+
+const pedestalMat = new THREE.MeshStandardMaterial({ color: '#fbf8fe', roughness: 0.7 });
+const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.85, 0.18, 96), pedestalMat);
+pedestal.position.y = -0.84;
+pedestal.receiveShadow = true; pedestal.castShadow = true;
+scene.add(pedestal);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: 0.1 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.94; floor.receiveShadow = true;
+scene.add(floor);
+
+const turntable = new THREE.Group();
+turntable.position.y = -0.75;
+scene.add(turntable);
+
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const get = (n, d) => (cs.getPropertyValue(n).trim() || d);
+  scene.background.set(get('--scene', '#efe8f6'));
+  pedestalMat.color.set(get('--pedestal', '#fbf8fe'));
+}
+readTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+
+/* ---------- textures ---------- */
+function drawFace(x, cx, cy, U, sy, ink = '#33221d') {
+  x.save(); x.translate(cx, cy); x.scale(1, sy);
+  x.lineCap = 'round'; x.strokeStyle = ink; x.lineWidth = 0.032 * U;
+  for (const s of [-1, 1]) {
+    x.beginPath(); x.arc(s * 0.19 * U, 0.03 * U, 0.06 * U, Math.PI * 1.12, Math.PI * 1.88); x.stroke();
+    x.fillStyle = 'rgba(255, 112, 84, 0.8)';
+    x.beginPath(); x.ellipse(s * 0.31 * U, 0.085 * U, 0.066 * U, 0.04 * U, 0, 0, Math.PI * 2); x.fill();
+  }
+  const my = 0.065 * U;
+  x.beginPath(); x.ellipse(0, my, 0.058 * U, 0.062 * U, 0, 0, Math.PI); x.closePath();
+  x.fillStyle = ink; x.fill();
+  x.save(); x.clip();
+  x.fillStyle = '#ef6a5f'; x.beginPath(); x.ellipse(0, my + 0.062 * U, 0.042 * U, 0.03 * U, 0, 0, Math.PI * 2); x.fill();
+  x.restore();
+  x.restore();
+}
+function sprinkle(x, w, h, colors, n, seed, maxR = 3.2) {
+  const r = rng(seed);
+  for (let i = 0; i < n; i++) {
+    x.globalAlpha = 0.45 + r() * 0.55;
+    x.fillStyle = colors[(r() * colors.length) | 0];
+    const s = 0.8 + Math.pow(r(), 3) * maxR;
+    x.beginPath(); x.arc(r() * w, r() * h, s, 0, Math.PI * 2); x.fill();
+  }
+  x.globalAlpha = 1;
+}
+function canvasTex(c) {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+function baoTexture(p, face) {
+  const c = document.createElement('canvas'); c.width = 2048; c.height = 1024;
+  const x = c.getContext('2d');
+  if (p.grad) { const g = x.createLinearGradient(0, 60, 0, 560); g.addColorStop(0, p.grad[0]); g.addColorStop(1, p.grad[1]); x.fillStyle = g; }
+  else x.fillStyle = p.base;
+  x.fillRect(0, 0, 2048, 1024);
+  if (p.glitter) sprinkle(x, 2048, 1024, p.glitter, p.dense ? 9000 : p.sparse ? 2600 : 6000, 7, 3.4);
+  // the sphere's front (+z) sits at u = 0.25; 326 px per unit, y squashed by 0.8 on the mesh
+  if (face) drawFace(x, 512, 424, 326, 1.25);
+  return canvasTex(c);
+}
+function butterFront(p, face) {
+  const c = document.createElement('canvas'); c.width = 1280; c.height = 400;
+  const x = c.getContext('2d');
+  x.fillStyle = p.base; x.fillRect(0, 0, 1280, 400);
+  if (p.flecks) sprinkle(x, 1280, 400, p.flecks, 900, 3, 2.6);
+  x.fillStyle = p.ink; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.font = '800 34px Figtree, system-ui, sans-serif';
+  x.fillText(p.word, 830, 152);
+  x.font = '800 124px Figtree, system-ui, sans-serif';
+  x.fillText('BUTTER', 830, 272);
+  if (face) {
+    drawFace(x, 250, 196, 533, 1);
+    x.fillStyle = p.ink; x.textAlign = 'left';
+    x.font = '700 26px Figtree, system-ui, sans-serif';
+    x.textAlign = 'center';
+    x.fillText('NET WT. 4 OZ (113 g)', 830, 318);
+  } else {
+    x.font = '600 70px Figtree, system-ui, sans-serif';
+    x.fillText('4 OZ.', 250, 200);
+    x.font = '600 30px Figtree, system-ui, sans-serif';
+    x.fillText('NET WT. (113 g)', 250, 248);
+  }
+  return canvasTex(c);
+}
+function butterSide(p) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = p.base; x.fillRect(0, 0, 512, 256);
+  if (p.flecks) sprinkle(x, 512, 256, p.flecks, 260, 11, 2);
+  return canvasTex(c);
+}
+
+/* ---------- geometry ---------- */
+function baoGeometry() {
+  const g = new THREE.SphereGeometry(1, 192, 128);
+  const p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const th = Math.acos(Math.max(-1, Math.min(1, v.y)));
+    const az = Math.atan2(v.z, v.x);
+    let r = 1;
+    const w = smooth(0.03, 0.16, th) * (1 - smooth(0.32, 0.8, th));
+    r += Math.sin(az * 14 + th * 7) * 0.03 * w;       // swirled pleats
+    r += 0.055 * (1 - smooth(0, 0.15, th));            // little top knot
+    let x = v.x * r, y = v.y * r * 0.8, z = v.z * r;
+    if (y < -0.12) y = -0.12 + (y + 0.12) * 0.35;       // flat bottom inside the steamer
+    p.setXYZ(i, x, y, z);
+  }
+  return g;
+}
+function roundedBox(w, h, d, r) {
+  const g = new THREE.BoxGeometry(w, h, d, 72, 24, 24);
+  const p = g.attributes.position, v = new THREE.Vector3(), inner = new THREE.Vector3();
+  const hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    inner.set(Math.max(-hx, Math.min(hx, v.x)), Math.max(-hy, Math.min(hy, v.y)), Math.max(-hz, Math.min(hz, v.z)));
+    const n = v.clone().sub(inner); const len = n.length();
+    if (len > 1e-6) v.copy(inner).addScaledVector(n, r / len);
+    v.y += 0.025 * (1 - (v.x / (w / 2)) ** 2) * Math.max(0, v.y / (h / 2)); // soft pillowy top
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+}
+function jellyGeometry() {
+  // evenly sized triangles everywhere (no pinched poles, no long thin strips),
+  // so dents and limits can't create zigzag edges or a star at the top
+  let g = new THREE.IcosahedronGeometry(1, 46);
+  g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  g = mergeVertices(g, 1e-5);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let y = p.getY(i) * 0.93;
+    if (y < -0.62) y = -0.62 + (y + 0.62) * 0.4;
+    p.setY(i, y);
+  }
+  return g;
+}
+
+/* ---------- deformation ---------- */
+function meshVolume(p, idx) {
+  let v = 0;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+    v += p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1])
+       - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c])
+       + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c]);
+  }
+  return v / 6;
+}
+// move the pressed-in gel into a ring around the finger, just enough to keep the volume
+function compensate(arr, idx, rw, rn, vol0, floorY, sq) {
+  let any = 0; for (let i = 0; i < rw.length; i++) any += rw[i];
+  if (any < 1e-6) return;
+  const v1 = meshVolume(arr, idx), s0 = 0.02;
+  const add = (s) => { for (let i = 0; i < rw.length; i++) { const k = rw[i] * s; if (!k) continue; const i3 = i * 3; arr[i3] += rn[i3] * k; arr[i3 + 1] = Math.max(floorY, arr[i3 + 1] + rn[i3 + 1] * k); arr[i3 + 2] += rn[i3 + 2] * k; } };
+  add(s0);
+  const slope = (meshVolume(arr, idx) - v1) / s0;
+  if (!(slope > 1e-6)) { add(-s0); return; }
+  add(Math.max(-s0, Math.min(40, (vol0 - v1) / slope - s0)));
+  if (sq && sq.contain) for (let i3 = 0; i3 < arr.length; i3 += 3) sq.contain(arr, i3);
+}
+// scale the shape (from its base) so it holds exactly the starting volume
+function keepVolume(arr, idx, vol0, floorY) {
+  const v = meshVolume(arr, idx);
+  if (!(v > 0)) return;
+  const k = Math.cbrt(vol0 / v);
+  if (Math.abs(k - 1) < 1e-5) return;
+  for (let i = 0; i < arr.length; i += 3) {
+    arr[i] *= k; arr[i + 2] *= k;
+    arr[i + 1] = floorY + (arr[i + 1] - floorY) * k;
+  }
+}
+function weldGroups(arr) {
+  const map = new Map();
+  for (let i = 0; i < arr.length / 3; i++) {
+    const k = Math.round(arr[i * 3] * 1e4) + ',' + Math.round(arr[i * 3 + 1] * 1e4) + ',' + Math.round(arr[i * 3 + 2] * 1e4);
+    const l = map.get(k); if (l) l.push(i); else map.set(k, [i]);
+  }
+  return [...map.values()].filter((l) => l.length > 1);
+}
+function weldNormals(mesh) {
+  const n = mesh.geometry.attributes.normal.array;
+  for (const grp of mesh.userData.dups) {
+    let x = 0, y = 0, z = 0;
+    for (const i of grp) { x += n[i * 3]; y += n[i * 3 + 1]; z += n[i * 3 + 2]; }
+    const l = Math.hypot(x, y, z) || 1; x /= l; y /= l; z /= l;
+    for (const i of grp) { n[i * 3] = x; n[i * 3 + 1] = y; n[i * 3 + 2] = z; }
+  }
+}
+function makeDeformable(mesh) {
+  const g = mesh.geometry;
+  g.computeVertexNormals();
+  mesh.userData.dups = weldGroups(g.attributes.position.array);
+  weldNormals(mesh);
+  mesh.userData.rest = g.attributes.position.array.slice();
+  mesh.userData.restN = g.attributes.normal.array.slice();
+  mesh.userData.orig = mesh.userData.rest.slice();
+  mesh.userData.vol0 = meshVolume(mesh.userData.rest, g.index.array);
+  g.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  g.attributes.normal.setUsage(THREE.DynamicDrawUsage);
+  g.computeBoundingSphere(); g.boundingSphere.radius *= 1.4;
+  g.computeBoundingBox(); g.boundingBox.expandByScalar(0.4);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+}
+function deform(sq) {
+  const dents = sq.dents, ph = sq.cfg.phys;
+  for (const m of sq.def) {
+    const g = m.geometry, pos = g.attributes.position.array, rest = m.userData.rest, rn = m.userData.restN;
+    if (!dents.length) {
+      if (m.userData.dirty) { pos.set(rest); g.attributes.normal.array.set(rn); g.attributes.position.needsUpdate = g.attributes.normal.needsUpdate = true; m.userData.dirty = false; }
+      continue;
+    }
+    const n = rest.length / 3;
+    const rwA = null, oR = m.userData.origR;
+    const fl = sq.floorY, sx = sq.squash ? sq.squash.x : 1, sy = sq.squash ? sq.squash.y : 1;
+    for (let i = 0; i < n; i++) {
+      const i3 = i * 3, px = rest[i3], py = rest[i3 + 1], pz = rest[i3 + 2];
+      let dx = 0, dy = 0, dz = 0, rwv = 0;
+      // the deeper this spot already is, the harder it is to push further (no hard core)
+      const room = oR ? smooth(0.4, 0.8, Math.hypot(px, py - 0.05, pz) / oR[i]) : 1;
+      for (const d of dents) {
+        const ex = px - d.c.x, ey = py - d.c.y, ez = pz - d.c.z;
+        const q = (ex * ex + ey * ey + ez * ez) * d.inv;
+        const f = Math.exp(-q), ring = Math.exp(-q * 0.25);
+        const push = d.depth * f * room;
+        const bul = d.depth * ((ring - f) * ph.bulge + ph.inflate);
+        dx += d.n.x * push + rn[i3] * bul;
+        dy += d.n.y * push + rn[i3 + 1] * bul;
+        dz += d.n.z * push + rn[i3 + 2] * bul;
+        rwv += (ring - f) * Math.abs(d.depth);
+      }
+      const w = smooth(fl, fl + (ph.pin || 0.45), py); // base is stiff, so the bottom never moves
+      if (rwA) { const oR = m.userData.origR[i], hr = oR - Math.hypot(px, py - 0.05, pz); rwA[i] = Math.max(0, rwv) * w * smooth(0, 0.06, hr); }
+      const X = (px + dx) * sx, Y = fl + (py + dy - fl) * sy, Z = (pz + dz) * sx;
+      pos[i3] = px + (X - px) * w; pos[i3 + 1] = Math.max(fl, py + (Y - py) * w); pos[i3 + 2] = pz + (Z - pz) * w;
+      if (sq.contain) sq.contain(pos, i3);
+    }
+    g.attributes.position.needsUpdate = true;
+    g.computeVertexNormals(); weldNormals(m);
+    m.userData.dirty = true;
+  }
+}
+function stepDents(sq, dt) {
+  const ph = sq.cfg.phys;
+  for (const d of sq.dents) {
+    if (d.held) {
+      d.t += dt;
+      const target = ph.max * d.scale * d.press * (0.6 + 0.4 * smooth(0, 1.4, d.t)); // harder the longer you hold
+      d.depth += (target - d.depth) * (1 - Math.exp(-dt * 5)); d.vel = 0;
+    }
+    else if (ph.mode === 'plastic') {
+      d.depth += (d.settle - d.depth) * (1 - Math.exp(-dt * 12));
+      if (Math.abs(d.depth - d.settle) < 0.004) d.bake = true;
+    }
+    else if (ph.mode === 'slow') d.depth *= Math.exp(-dt / ph.tau);
+    else { const a = -ph.k * d.depth - ph.c * d.vel; d.vel += a * dt; d.depth += d.vel * dt; }
+  }
+  for (const d of sq.dents) if (d.bake && !d.held) bakeDent(sq, d);
+  sq.dents = sq.dents.filter((d) => !d.baked && (d.held || Math.abs(d.depth) > 0.0015 || Math.abs(d.vel) > 0.01));
+}
+
+function refreshRestNormals(m) {
+  const g = m.geometry, pos = g.attributes.position.array;
+  pos.set(m.userData.rest);
+  g.computeVertexNormals(); weldNormals(m);
+  m.userData.restN.set(g.attributes.normal.array);
+  g.attributes.position.needsUpdate = g.attributes.normal.needsUpdate = true;
+  m.userData.dirty = true;
+}
+// press a dent permanently into the current shape, so the next squeeze starts from here
+function bakeDent(sq, d) {
+  const ph = sq.cfg.phys;
+  for (const m of sq.def) {
+    const rest = m.userData.rest, rn = m.userData.restN, tmp = [0, 0, 0];
+    const rw = new Float32Array(rest.length / 3);
+    for (let i3 = 0; i3 < rest.length; i3 += 3) {
+      const px = rest[i3], py = rest[i3 + 1], pz = rest[i3 + 2];
+      const ex = px - d.c.x, ey = py - d.c.y, ez = pz - d.c.z;
+      const q = (ex * ex + ey * ey + ez * ez) * d.inv;
+      const f = Math.exp(-q), ring = Math.exp(-q * 0.25);
+      const w = smooth(sq.floorY, sq.floorY + 0.45, py);
+      const room = m.userData.origR ? smooth(0.4, 0.8, Math.hypot(px, py - 0.05, pz) / m.userData.origR[i3 / 3]) : 1;
+      const push = d.depth * f * w * room, bul = d.depth * ((ring - f) * ph.bulge + ph.inflate) * w;
+      rw[i3 / 3] = m.userData.origR ? Math.max(0, ring - f) * w * smooth(0, 0.06, m.userData.origR[i3 / 3] - Math.hypot(px, py - 0.05, pz)) : 0;
+      tmp[0] = px + d.n.x * push + rn[i3] * bul;
+      tmp[1] = py + d.n.y * push + rn[i3 + 1] * bul;
+      tmp[2] = pz + d.n.z * push + rn[i3 + 2] * bul;
+      tmp[1] = Math.max(sq.floorY, tmp[1]);
+      rest[i3] = tmp[0]; rest[i3 + 1] = tmp[1]; rest[i3 + 2] = tmp[2];
+      if (sq.contain) sq.contain(rest, i3);
+    }
+    if (m.userData.dirs) radialSmooth(m, sq, 6);
+    else {
+      smoothRest(m, sq.floorY, 3);
+      if (sq.contain) for (let pass = 0; pass < 3; pass++) { for (let i3 = 0; i3 < rest.length; i3 += 3) sq.contain(rest, i3); if (pass < 2) smoothRest(m, sq.floorY, 1); }
+    }
+    refreshRestNormals(m);
+  }
+  d.baked = true;
+}
+// smooth the jelly as a "distance from the centre" field: no sideways sliding, so no creases or zigzags
+function radialSmooth(m, sq, passes) {
+  smoothRest(m, sq.floorY, 0);                     // builds the neighbour lists once
+  const ud = m.userData, rest = ud.rest, dirs = ud.dirs, n = rest.length / 3;
+  const { keys, start, list } = ud.adj;
+  const r = new Float32Array(n), tmp = new Float32Array(n), pin = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const i3 = i * 3;
+    r[i] = rest[i3] * dirs[i3] + (rest[i3 + 1] - 0.05) * dirs[i3 + 1] + rest[i3 + 2] * dirs[i3 + 2];
+    pin[i] = smooth(sq.floorY, sq.floorY + 0.25, rest[i3 + 1]);
+  }
+  for (let p = 0; p < passes; p++) {
+    tmp.set(r);
+    for (let k = 0; k < keys.length; k++) {
+      const v = keys[k]; let sum = 0; const cnt = start[k + 1] - start[k];
+      for (let j = start[k]; j < start[k + 1]; j++) sum += r[list[j]];
+      tmp[v] = r[v] + 0.55 * pin[v] * (sum / cnt - r[v]);
+    }
+    r.set(tmp);
+  }
+  for (let i = 0; i < n; i++) {
+    const i3 = i * 3;
+    rest[i3] = dirs[i3] * r[i]; rest[i3 + 1] = 0.05 + dirs[i3 + 1] * r[i]; rest[i3 + 2] = dirs[i3 + 2] * r[i];
+    if (sq.contain) sq.contain(rest, i3);
+  }
+}
+function smoothRest(m, floorY, passes = 2) {
+  const ud = m.userData, rest = ud.rest, nV = rest.length / 3;
+  if (!ud.adj) {
+    const canon = new Int32Array(nV).map((_, i) => i);
+    for (const g of ud.dups) for (const i of g) canon[i] = g[0];
+    const sets = new Map(), idx = m.geometry.index.array;
+    const link = (a, b) => { if (a === b) return; let st = sets.get(a); if (!st) sets.set(a, st = new Set()); st.add(b); };
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = canon[idx[t]], b = canon[idx[t + 1]], c = canon[idx[t + 2]];
+      link(a, b); link(b, a); link(b, c); link(c, b); link(a, c); link(c, a);
+    }
+    const keys = [...sets.keys()], start = new Int32Array(keys.length + 1), list = [];
+    keys.forEach((k, i) => { start[i] = list.length; list.push(...sets.get(k)); });
+    start[keys.length] = list.length;
+    ud.adj = { keys: Int32Array.from(keys), start, list: Int32Array.from(list), canon };
+  }
+  const { keys, start, list, canon } = ud.adj, tmp = new Float32Array(keys.length * 3);
+  const step = (lam) => {
+    for (let k = 0; k < keys.length; k++) {
+      const v = keys[k] * 3; let ax = 0, ay = 0, az = 0; const cnt = start[k + 1] - start[k];
+      for (let j = start[k]; j < start[k + 1]; j++) { const u = list[j] * 3; ax += rest[u]; ay += rest[u + 1]; az += rest[u + 2]; }
+      const pin = smooth(floorY, floorY + 0.3, rest[v + 1]);
+      tmp[k * 3] = rest[v] + lam * pin * (ax / cnt - rest[v]);
+      tmp[k * 3 + 1] = rest[v + 1] + lam * pin * (ay / cnt - rest[v + 1]);
+      tmp[k * 3 + 2] = rest[v + 2] + lam * pin * (az / cnt - rest[v + 2]);
+    }
+    for (let k = 0; k < keys.length; k++) { const v = keys[k] * 3; rest[v] = tmp[k * 3]; rest[v + 1] = tmp[k * 3 + 1]; rest[v + 2] = tmp[k * 3 + 2]; }
+    for (let i = 0; i < nV; i++) if (canon[i] !== i) { const a = i * 3, b = canon[i] * 3; rest[a] = rest[b]; rest[a + 1] = rest[b + 1]; rest[a + 2] = rest[b + 2]; }
+  };
+  for (let i = 0; i < passes; i++) { step(0.5); step(-0.53); }
+}
+
+/* ---------- squishies ---------- */
+function holderFor(yOffset, parent = turntable) {
+  const holder = new THREE.Group(), content = new THREE.Group();
+  content.position.y = yOffset; holder.add(content); parent.add(holder);
+  return { holder, content };
+}
+function buildBao(parent, bare) {
+  const { holder, content } = holderFor(0.45, parent);
+  const body = new THREE.Mesh(baoGeometry(), new THREE.MeshPhysicalMaterial({
+    roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.25, sheen: 0.4, sheenRoughness: 0.6, sheenColor: new THREE.Color('#ffffff'),
+  }));
+  content.add(body); makeDeformable(body);
+  const prof = [[0, -0.45], [0.9, -0.45], [0.97, -0.435], [1.0, -0.39], [1.045, -0.06], [1.075, -0.035], [1.085, 0.0], [1.065, 0.022], [1.035, 0.008], [1.005, -0.05], [0.965, -0.4], [0, -0.4]].map(([a, b]) => new THREE.Vector2(a, b));
+  const stMat = new THREE.MeshStandardMaterial({ color: '#d9ba8c', roughness: 0.55, side: THREE.DoubleSide });
+  const steamer = new THREE.Mesh(new THREE.LatheGeometry(prof, 120), stMat);
+  steamer.castShadow = steamer.receiveShadow = true;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.03, 0.012, 8, 120), stMat);
+  ring.rotation.x = Math.PI / 2; ring.position.y = -0.22;
+  if (!bare) content.add(steamer, ring);
+  return {
+    holder, content, def: [body],
+    // keep the bun inside the steamer walls when it bulges
+    contain(pos, i3) {
+      let y = pos[i3 + 1];
+      if (y > 0.03) return;
+      if (y < -0.39) { y = -0.39; pos[i3 + 1] = y; }
+      const maxR = (y >= -0.05 ? 1.005 + Math.min(1, (y + 0.05) / 0.058) * 0.03 : 0.965 + (y + 0.4) / 0.35 * 0.04) - 0.014;
+      const x = pos[i3], z = pos[i3 + 2], r = Math.hypot(x, z);
+      if (r > maxR) { const k = maxR / r; pos[i3] = x * k; pos[i3 + 2] = z * k; }
+    },
+    apply(p, face) {
+      const m = body.material;
+      m.map?.dispose(); m.map = baoTexture(p, face); m.color.set('#ffffff');
+      m.iridescence = p.irid ? 1 : 0; m.iridescenceIOR = 1.45; m.iridescenceThicknessRange = [120, 420];
+      m.metalness = p.metal || 0; m.roughness = p.metal ? 0.3 : p.irid ? 0.25 : 0.4;
+      m.needsUpdate = true;
+    },
+  };
+}
+function buildButter(parent) {
+  const { holder, content } = holderFor(0.375, parent);
+  const mats = Array.from({ length: 6 }, () => new THREE.MeshPhysicalMaterial({ roughness: 0.58, sheen: 0.6, sheenRoughness: 0.8, sheenColor: new THREE.Color('#ffffff') }));
+  const body = new THREE.Mesh(roundedBox(2.4, 0.75, 0.8, 0.16), mats);
+  content.add(body); makeDeformable(body);
+  // a solid core the surfaces can never pass through, so squeezing can't punch a see-through hole
+  const CORE = [0.85, 0.13, 0.15];
+  return {
+    holder, content, def: [body],
+    contain(pos, i3) {
+      const o = body.userData.orig;
+      // soft limit: the deeper a point goes, the harder it resists, easing out before the core
+      for (let k = 0; k < 3; k++) {
+        const ok = o[i3 + k], c = CORE[k];
+        if (ok > c) { const t = ok - pos[i3 + k]; if (t > 0) { const m = ok - c; pos[i3 + k] = ok - m * (1 - Math.exp(-t / m)); } }
+        else if (ok < -c) { const t = pos[i3 + k] - ok; if (t > 0) { const m = -c - ok; pos[i3 + k] = ok + m * (1 - Math.exp(-t / m)); } }
+      }
+    },
+    apply(p, face) {
+      const front = butterFront(p, face), side = butterSide(p);
+      mats.forEach((m, i) => { if (m.map && !mats.slice(0, i).some((o) => o.map === m.map)) m.map.dispose(); m.map = i === 4 ? front : side; m.color.set('#ffffff'); m.needsUpdate = true; });
+    },
+  };
+}
+function buildJelly(parent) {
+  const { holder, content } = holderFor(0.73, parent);
+  const mat = new THREE.MeshPhysicalMaterial({
+    transmission: 1, thickness: 0.35, roughness: 0.12, ior: 1.08,
+    clearcoat: 1, clearcoatRoughness: 0.04, attenuationDistance: 1.8, specularIntensity: 1,
+  });
+  const body = new THREE.Mesh(jellyGeometry(), mat);
+  content.add(body); makeDeformable(body);
+  { const o = body.userData.orig, r = new Float32Array(o.length / 3);
+    for (let i = 0; i < r.length; i++) r[i] = Math.hypot(o[i * 3], o[i * 3 + 1] - 0.05, o[i * 3 + 2]) * 1.02;
+    body.userData.origR = r;
+    const dirs = new Float32Array(o.length), r0 = new Float32Array(o.length / 3);
+    for (let i = 0; i < r0.length; i++) {
+      const x = o[i * 3], y = o[i * 3 + 1] - 0.05, z = o[i * 3 + 2], l = Math.hypot(x, y, z) || 1;
+      r0[i] = l; dirs[i * 3] = x / l; dirs[i * 3 + 1] = y / l; dirs[i * 3 + 2] = z / l;
+    }
+    body.userData.dirs = dirs; body.userData.r0 = r0; }
+  return {
+    holder, content, def: [body],
+    // every surface point may only move straight in or out from the centre,
+    // so the gel can never fold over itself or tear into jagged shards
+    contain(pos, i3) {
+      if (!body.userData.dirs) return;
+      const i = i3 / 3, d = body.userData.dirs, r0 = body.userData.r0[i];
+      const ux = d[i3], uy = d[i3 + 1], uz = d[i3 + 2];
+      let r = (pos[i3]) * ux + (pos[i3 + 1] - 0.05) * uy + pos[i3 + 2] * uz;
+      // soft limits: ease into the outline and the inner floor instead of stopping dead
+      const hi = r0 * 0.97, top = r0 * 1.04, lo = r0 * 0.55, bot = r0 * 0.45;
+      if (r > hi) r = hi + (top - hi) * (1 - Math.exp(-(r - hi) / (top - hi)));
+      else if (r < lo) r = lo - (lo - bot) * (1 - Math.exp(-(lo - r) / (lo - bot)));
+      pos[i3] = ux * r; pos[i3 + 1] = 0.05 + uy * r; pos[i3 + 2] = uz * r;
+    },
+    apply(p) { mat.color.set(p.base); mat.attenuationColor.set(p.base); mat.needsUpdate = true; },
+  };
+}
+
+const builders = { bao: buildBao, butter: buildButter, jelly: buildJelly };
+const sq = {};
+for (const id of Object.keys(TYPES)) {
+  sq[id] = Object.assign(builders[id](), { id, cfg: TYPES[id], dents: [], pop: { v: 0, vel: 0, target: 0, delay: 0 } });
+  sq[id].holder.visible = false;
+  { const r = sq[id].def[0].userData.rest; let mn = Infinity; for (let i = 1; i < r.length; i += 3) mn = Math.min(mn, r[i]); sq[id].floorY = mn; }
+}
+let cur = sq[state.type];
+cur.holder.visible = true; cur.pop.v = cur.pop.target = 1;
+
+function applyPreset(id) {
+  const s = sq[id], p = TYPES[id].presets[state.pick[id] || 0];
+  s.apply(p, state.face);
+}
+
+/* ---------- sound ---------- */
+// Satisfying squish = soft "squelch" body + a fine ASMR crackle that keeps going while you hold,
+// then an airy sigh (foam) or a wet plop (jelly) as it rises back.
+let actx = null, noiseBuf = null, master = null, verb = null;
+function audio() {
+  if (!state.sound) return null;
+  try {
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      const sr = actx.sampleRate;
+      noiseBuf = actx.createBuffer(1, sr * 2, sr);
+      const ch = noiseBuf.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+      const comp = actx.createDynamicsCompressor();
+      comp.threshold.value = -20; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.2;
+      master = actx.createGain(); master.gain.value = 0.9;
+      master.connect(comp).connect(actx.destination);
+      // tiny soft room so it doesn't sound dry and digital
+      const ir = actx.createBuffer(2, Math.floor(sr * 0.6), sr);
+      for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.5); }
+      verb = actx.createConvolver(); verb.buffer = ir;
+      const wet = actx.createGain(); wet.gain.value = 0.16;
+      verb.connect(wet).connect(comp);
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  } catch { return null; }
+}
+const out = (node) => { node.connect(master); node.connect(verb); };
+const SOUND = {
+  //        squelch formants        crackle band      grains  body  bubbles
+  bao:    { f: [700, 260], q: 2.2, ck: [2600, 6500], n: 70, lp: 7000, body: 110, pops: 3,  gain: 0.55 },
+  butter: { f: [480, 200], q: 1.6, ck: [1400, 3600], n: 55, lp: 3200, body: 90,  pops: 1,  gain: 0.5 },
+  jelly:  { f: [950, 300], q: 4.0, ck: [1800, 5200], n: 60, lp: 5200, body: 140, pops: 10, gain: 0.55 },
+};
+function noiseBurst(a, dest, t, len, type, f0, f1, q, gain, attack = 0.02) {
+  const src = a.createBufferSource(); src.buffer = noiseBuf;
+  const fl = a.createBiquadFilter(); fl.type = type; fl.Q.value = q;
+  fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(f1, t + len);
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  src.connect(fl).connect(g).connect(dest);
+  src.start(t, Math.random() * 1.5, len + 0.02);
+}
+function grains(a, dest, t, c, count, span) {
+  for (let i = 0; i < count; i++) {
+    // denser at first, thinning out, like foam cells settling under your finger
+    const at = t + Math.pow(Math.random(), 1.8) * span;
+    const f = c.ck[0] + Math.random() * (c.ck[1] - c.ck[0]);
+    const len = 0.004 + Math.random() * 0.01;
+    noiseBurst(a, dest, at, len, 'bandpass', f, f * 0.8, 3, 0.05 + Math.random() * 0.12, 0.001);
+  }
+}
+function pop(a, dest, t, f, gain) {
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.9, t + 0.03);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + 0.06);
+}
+// Four squish styles. Each one is built from a few physical ideas:
+//  soft   – air slowly pushed out of foam (muffled "fffhh" + weight)
+//  wet    – slime squelch: vowel-like gurgle with irregular pulses + clusters of water bubbles
+//  crunch – ASMR foam crunch: dense tiny crackles that thin out
+//  squeak – rubber toy: a gliding, wobbling squeak with a puff of air
+const r2 = (a, b) => a + Math.random() * (b - a);
+function bubble2(a, dest, t, f, gain, dur = 0.035) {
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * r2(1.5, 2.3), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + dur + 0.01);
+}
+function gurgle(a, dest, t, len, f0, f1, q, peak, rate = 38) {
+  const src = a.createBufferSource(); src.buffer = noiseBuf;
+  const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
+  bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + len);
+  const g = a.createGain(), p = g.gain;
+  p.setValueAtTime(0.0001, t);
+  let tt = t; const n = Math.max(3, Math.floor(len * rate));
+  for (let i = 0; i < n; i++) { tt += (1 / rate) * r2(0.5, 1.6); p.linearRampToValueAtTime(peak * Math.pow(1 - i / n, 1.2) * r2(0.2, 1), tt); }
+  p.linearRampToValueAtTime(0.0001, tt + 0.03);
+  src.connect(bp).connect(g).connect(dest); src.start(t, Math.random() * 1.5, len + 0.1);
+}
+function crunchy(a, dest, t, count, span, k, gain = 0.3) {
+  for (let i = 0; i < count; i++) {
+    const at = t + Math.pow(Math.random(), 1.9) * span, f = r2(1800, 6200) * k;
+    noiseBurst(a, dest, at, r2(0.003, 0.009), 'bandpass', f, f * 0.85, 2.5, r2(0.08, 1) * gain, 0.0008);
+  }
+}
+function squeak(a, dest, t, f0, fPeak, fEnd, len, gain) {
+  const o = a.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(fPeak, t + len * 0.35); o.frequency.linearRampToValueAtTime(fEnd, t + len);
+  const vib = a.createOscillator(), vg = a.createGain(); vib.frequency.value = r2(24, 32); vg.gain.value = f0 * 0.035;
+  vib.connect(vg).connect(o.frequency);
+  const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fPeak * 2; bp.Q.value = 3;
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200;
+  const g = a.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.025); g.gain.setValueAtTime(gain, t + len * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  o.connect(bp).connect(lp).connect(g).connect(dest);
+  o.start(t); o.stop(t + len + 0.02); vib.start(t); vib.stop(t + len + 0.02);
+}
+function thump(a, dest, t, f, gain) {
+  const o = a.createOscillator(), g = a.createGain();
+  o.frequency.setValueAtTime(f * 1.4, t); o.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.18);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + 0.24);
+}
+const kindK = (kind) => (kind === 'butter' ? 0.8 : kind === 'jelly' ? 1.15 : 1);
+function squishSound(kind) {
+  const a = audio(); if (!a) return null;
+  const t = a.currentTime + 0.005, k = kindK(kind), st = state.sndStyle;
+  const bus = a.createGain(); bus.gain.value = 0.9; out(bus);
+  if (st === 'soft') {
+    noiseBurst(a, bus, t, 0.6, 'lowpass', 1300 * k, 320 * k, 0.7, 0.75, 0.06);
+    noiseBurst(a, bus, t + 0.02, 0.5, 'bandpass', 260 * k, 180 * k, 1.2, 0.45, 0.05);
+    thump(a, bus, t, 90 * k, 0.28);
+    for (let i = 0; i < 3; i++) bubble2(a, bus, t + r2(0.05, 0.35), r2(260, 520) * k, 0.03);
+  } else if (st === 'wet') {
+    gurgle(a, bus, t, 0.5, 430 * k, 240 * k, 7, 1.1);
+    gurgle(a, bus, t + 0.01, 0.42, 1150 * k, 680 * k, 9, 0.45, 45);
+    for (let i = 0; i < 34; i++) bubble2(a, bus, t + Math.pow(Math.random(), 1.6) * 0.5, r2(240, 950) * k, r2(0.06, 0.2), r2(0.02, 0.06));
+    thump(a, bus, t, 130 * k, 0.3);
+  } else if (st === 'crunch') {
+    crunchy(a, bus, t, 140, 1.1, k, 0.32);
+    noiseBurst(a, bus, t, 0.35, 'lowpass', 900 * k, 250, 0.7, 0.25, 0.03);
+    thump(a, bus, t, 100 * k, 0.22);
+  } else {
+    squeak(a, bus, t, 560 * k, 820 * k, 690 * k, 0.32, 0.22);
+    noiseBurst(a, bus, t, 0.28, 'highpass', 2600, 2000, 0.7, 0.07, 0.02);
+    thump(a, bus, t, 110 * k, 0.2);
+  }
+  return bus;
+}
+function fadeBus(bus) {
+  if (!actx) return;
+  const t = actx.currentTime;
+  try { bus.gain.cancelScheduledValues(t); bus.gain.setValueAtTime(bus.gain.value, t); bus.gain.linearRampToValueAtTime(0, t + 0.15); } catch {}
+}
+function crackle(kind) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime + 0.005, k = kindK(kind), st = state.sndStyle;
+  const bus = a.createGain(); bus.gain.value = 0.6; out(bus);
+  if (st === 'soft') noiseBurst(a, bus, t, 0.18, 'lowpass', 900 * k, 300, 0.7, 0.35, 0.03);
+  else if (st === 'wet') { gurgle(a, bus, t, 0.14, 600 * k, 350 * k, 7, 0.6); for (let i = 0; i < 6; i++) bubble2(a, bus, t + r2(0, 0.12), r2(300, 900) * k, 0.12); }
+  else if (st === 'crunch') crunchy(a, bus, t, 22, 0.15, k, 0.3);
+  else squeak(a, bus, t, 640 * k, 760 * k, 700 * k, 0.1, 0.14);
+}
+function plip() {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime + 0.005, k = kindK(cur.id), st = state.sndStyle;
+  const bus = a.createGain(); bus.gain.value = 0.6; out(bus);
+  if (st === 'soft') noiseBurst(a, bus, t, 1.0, 'bandpass', 300 * k, 800 * k, 0.8, 0.14, 0.3);
+  else if (st === 'wet') { for (let i = 0; i < 8; i++) bubble2(a, bus, t + Math.pow(Math.random(), 1.5) * 0.3, r2(300, 800) * k, r2(0.08, 0.16)); noiseBurst(a, bus, t + 0.02, 0.035, 'highpass', 2200, 1800, 0.7, 0.25, 0.002); gurgle(a, bus, t, 0.18, 500 * k, 800 * k, 6, 0.35); }
+  else if (st === 'crunch') crunchy(a, bus, t + 0.05, 45, 1.8, k, 0.18);
+  else squeak(a, bus, t, 700 * k, 640 * k, 430 * k, 0.38, 0.16);
+}
+
+/* ---------- interaction ---------- */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const pointers = new Map();          // each finger on the screen gets its own dent
+let spinId = null, lastX = 0, lastY = 0, spinVel = 0, idle = 0, riseStart = null;
+let grip = store.get('grip', 'poke') === 'pinch' ? 'pinch' : 'poke';
+let handDents = null;
+const squeezeBtn = $('#squeeze');
+
+function restHit(hit) {
+  const m = hit.object, r = m.userData.rest, rn = m.userData.restN, f = hit.face;
+  const c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (const i of [f.a, f.b, f.c]) { c.x += r[i * 3]; c.y += r[i * 3 + 1]; c.z += r[i * 3 + 2]; n.x += rn[i * 3]; n.y += rn[i * 3 + 1]; n.z += rn[i * 3 + 2]; }
+  return { c: c.divideScalar(3), n: n.normalize().negate() };
+}
+function pick(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return ray.intersectObjects(cur.def, false)[0] || null;
+}
+const mirror = (v) => new THREE.Vector3(-v.x, v.y, -v.z);
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+const pressOf = (e) => (e && e.pointerType !== 'mouse' && e.pressure > 0 && e.pressure !== 0.5) ? 0.75 + 0.5 * e.pressure : 1;
+function newDent(c, n, R, scale = 1, kind = 'finger') {
+  return { c, n, depth: 0, vel: 0, held: true, inv: 1 / (R * R), R, scale, kind, t: 0, press: 1 };
+}
+function trimDents() {
+  while (cur.dents.length > 14) {
+    const i = cur.dents.findIndex((d) => !d.held);
+    if (i < 0) break; cur.dents.splice(i, 1);
+  }
+}
+function onSquishStart(dents) {
+  riseStart = null; buzz(12);
+  const bus = squishSound(cur.cfg.sound); if (bus && dents) dents[0].bus = bus;
+  state.count++; store.set('count', state.count); renderCount();
+  hint.classList.add('gone');
+}
+function release(dents) {
+  for (const d of dents) { d.held = false; d.settle = d.depth * 0.85; }
+  if (dents[0] && dents[0].bus) { fadeBus(dents[0].bus); dents[0].bus = null; }
+  if (!cur.dents.some((d) => d.held) && cur.cfg.phys.mode !== 'plastic') riseStart = performance.now();
+  setTimeout(plip, 90);
+}
+function startFinger(id, hit, e) {
+  const { c, n } = restHit(hit), R = cur.cfg.phys.R;
+  const d = newDent(c, n, R); d.press = pressOf(e);
+  const list = [d];
+  if (grip === 'pinch') list.push(newDent(mirror(c), mirror(n), R, 0.85)); // thumb in front, fingers behind
+  cur.dents.push(...list); trimDents();
+  pointers.set(id, { dents: list, lastDrop: c.clone() });
+  onSquishStart(list);
+}
+function handPoints(s) {
+  const r = s.def[0].userData.rest, ax = s.id === 'butter' ? 2 : 0, other = ax === 0 ? 2 : 0;
+  const yMid = { bao: 0.3, butter: 0, jelly: 0.05 }[s.id];
+  let hi = null, lo = null;
+  for (let i = 0; i < r.length; i += 3) {
+    if (Math.abs(r[i + 1] - yMid) > 0.09 || Math.abs(r[i + other]) > 0.15) continue;
+    if (!hi || r[i + ax] > hi[ax]) hi = [r[i], r[i + 1], r[i + 2]];
+    if (!lo || r[i + ax] < lo[ax]) lo = [r[i], r[i + 1], r[i + 2]];
+  }
+  const axis = new THREE.Vector3(); axis.setComponent(ax, 1);
+  return [[new THREE.Vector3(...hi), axis.clone().negate()], [new THREE.Vector3(...lo), axis.clone()]];
+}
+function startHands() {
+  if (handDents || cur.pop.v < 0.6) return;
+  const R = cur.cfg.phys.R * 1.8;
+  handDents = handPoints(cur).map(([c, n]) => newDent(c, n, R, 0.95, 'palm'));
+  cur.dents.push(...handDents); trimDents();
+  onSquishStart(handDents); idle = 0;
+  squeezeBtn.setAttribute('aria-pressed', 'true');
+}
+function endHands() {
+  if (!handDents) return;
+  release(handDents); handDents = null;
+  squeezeBtn.setAttribute('aria-pressed', 'false');
+}
+function releaseAll() {
+  for (const p of pointers.values()) release(p.dents);
+  pointers.clear(); endHands(); spinId = null;
+  canvas.classList.remove('squishing');
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (view === 'hc') { hcDown(e); return; }
+  idle = 0;
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  const hit = cur.pop.v > 0.6 ? pick(e.clientX, e.clientY) : null;
+  if (hit) { startFinger(e.pointerId, hit, e); canvas.classList.add('squishing'); }
+  else if (spinId === null && pointers.size === 0) { spinId = e.pointerId; spinVel = 0; lastX = e.clientX; lastY = e.clientY; }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (view === 'hc') { hcMove(e); return; }
+  const p = pointers.get(e.pointerId);
+  if (p) {
+    idle = 0;
+    const hit = pick(e.clientX, e.clientY);
+    if (hit) {
+      const { c, n } = restHit(hit), d = p.dents[0];
+      d.c.lerp(c, 0.35); d.n.lerp(n, 0.35).normalize();
+      if (d.depth > 0.08 && d.c.distanceTo(p.lastDrop) > d.R * 0.6) {
+        const trail = newDent(d.c.clone(), d.n.clone(), d.R);
+        trail.held = false; trail.depth = trail.settle = d.depth * 0.85;
+        cur.dents.push(trail); trimDents();
+        p.lastDrop = d.c.clone();
+        crackle(cur.cfg.sound);
+      }
+      if (p.dents[1]) { p.dents[1].c.copy(mirror(d.c)); p.dents[1].n.copy(mirror(d.n)); }
+      d.press = pressOf(e);
+    }
+    return;
+  }
+  if (e.pointerId !== spinId) return;
+  idle = 0;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  turntable.rotation.y += dx * 0.009;
+  turntable.rotation.x = Math.max(-0.3, Math.min(0.45, turntable.rotation.x + dy * 0.004));
+  spinVel = dx * 0.009 * 60;
+});
+function pointerEnd(e) {
+  if (view === 'hc') { hcUp(e); return; }
+  const p = pointers.get(e.pointerId);
+  if (p) { pointers.delete(e.pointerId); release(p.dents); }
+  if (e.pointerId === spinId) spinId = null;
+  if (!pointers.size) canvas.classList.remove('squishing');
+}
+canvas.addEventListener('pointerup', pointerEnd);
+canvas.addEventListener('pointercancel', pointerEnd);
+canvas.addEventListener('lostpointercapture', pointerEnd);
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+squeezeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); try { squeezeBtn.setPointerCapture(e.pointerId); } catch {} startHands(); });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => squeezeBtn.addEventListener(t, endHands));
+squeezeBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+squeezeBtn.addEventListener('keydown', (e) => { if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) { e.preventDefault(); startHands(); } });
+squeezeBtn.addEventListener('keyup', (e) => { if (e.code === 'Space' || e.code === 'Enter') endHands(); });
+
+addEventListener('keydown', (e) => {
+  if (view === 'hc') return;
+  if (e.code !== 'Space' || e.repeat || (e.target.closest && e.target.closest('button'))) return;
+  e.preventDefault(); startHands();
+});
+addEventListener('keyup', (e) => { if (view !== 'hc' && e.code === 'Space' && !(e.target.closest && e.target.closest('button'))) endHands(); });
+addEventListener('blur', releaseAll);
+
+/* ---------- fingertip overlay ---------- */
+const tipsEl = $('#tips'), tipPool = [];
+const tV = new THREE.Vector3(), tN = new THREE.Vector3(), tC = new THREE.Vector3();
+function drawTips() {
+  const held = cur.holder.visible ? cur.dents.filter((d) => d.held) : [];
+  while (tipPool.length < held.length) { const el = document.createElement('div'); el.className = 'tip'; tipsEl.appendChild(el); tipPool.push(el); }
+  const body = cur.def[0], w = innerWidth, h = innerHeight;
+  const ppu = h / (2 * Math.tan((camera.fov * Math.PI) / 360) * camDist);
+  tipPool.forEach((el, i) => {
+    const d = held[i];
+    if (!d) { el.hidden = true; return; }
+    el.hidden = false;
+    tV.copy(d.c).addScaledVector(d.n, d.depth * 0.7 - 0.05);
+    body.localToWorld(tV);
+    tN.copy(d.n).negate().transformDirection(body.matrixWorld);
+    const facing = tN.dot(tC.copy(camera.position).sub(tV)) > 0;
+    tV.project(camera);
+    const x = (tV.x + 1) / 2 * w, y = (1 - tV.y) / 2 * h;
+    const palm = d.kind === 'palm';
+    const sw = d.R * (palm ? 0.75 : 0.55) * ppu, sh = sw * (palm ? 1.3 : 1);
+    const k = 1 - 0.15 * Math.max(0, d.depth) / cur.cfg.phys.max;
+    el.className = 'tip' + (palm ? ' palm' : '') + (facing ? '' : ' behind');
+    el.style.width = sw + 'px'; el.style.height = sh + 'px';
+    el.style.transform = `translate(${x - sw / 2}px, ${y - sh / 2}px) scale(${k})`;
+  });
+}
+
+/* ---------- UI ---------- */
+const panel = $('#panel'), top = $('.top'), hint = $('#hint');
+function renderCount() { $('#count').textContent = `${state.count.toLocaleString()} squish${state.count === 1 ? '' : 'es'}`; }
+function renderPanel() {
+  const t = TYPES[state.type], i = state.pick[state.type] || 0;
+  document.querySelectorAll('.type').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.type === state.type)));
+  $('#vname').textContent = t.presets[i].name;
+  const sw = $('#swatches'); sw.innerHTML = '';
+  t.presets.forEach((p, j) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.id = `sw-${state.type}-${j}`;
+    b.style.background = p.css; b.title = p.name; b.setAttribute('aria-label', p.name);
+    b.setAttribute('aria-pressed', String(j === i));
+    b.addEventListener('click', () => {
+      state.pick[state.type] = j; store.set('pick', state.pick);
+      applyPreset(state.type); cur.pop.vel -= 3.2; renderPanel();
+    });
+    sw.appendChild(b);
+  });
+  t.specs.forEach(([k, v], j) => { $('#k' + j).textContent = k; $('#v' + j).textContent = v; });
+  const face = $('#face');
+  face.hidden = !!t.noFace;
+  $('#reshape').hidden = t.phys.mode !== 'plastic';
+  if (t.phys.mode === 'plastic') $('#last').textContent = 'Stays';
+  face.setAttribute('aria-pressed', String(state.face));
+  face.textContent = state.face ? 'Face on' : 'Face off';
+  document.querySelectorAll('.seg button[data-grip]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.grip === grip)));
+  document.querySelectorAll('.seg button[data-snd]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.snd === state.sndStyle)));
+  $('#sound').setAttribute('aria-pressed', String(state.sound));
+  $('#sound').textContent = state.sound ? 'Sound on' : 'Sound off';
+}
+function switchType(id) {
+  if (id === state.type) return;
+  releaseAll();
+  cur.dents.forEach((d) => (d.held = false));
+  cur.pop.target = 0;
+  state.type = id; store.set('type', id);
+  cur = sq[id];
+  cur.dents = []; deform(cur);
+  cur.holder.visible = true;
+  Object.assign(cur.pop, { v: 0, vel: 0, target: 1, delay: 0.16 });
+  riseStart = null; $('#last').textContent = '–';
+  renderPanel(); fit();
+}
+document.querySelectorAll('.type').forEach((b) => b.addEventListener('click', () => switchType(b.dataset.type)));
+let reshaping = 0;
+$('#reshape').addEventListener('click', () => { reshaping = 0.7; squishSound(cur.cfg.sound); });
+document.querySelectorAll('.seg button[data-snd]').forEach((b) => b.addEventListener('click', () => {
+  state.sndStyle = b.dataset.snd; store.set('snd', state.sndStyle); renderPanel();
+  if (!state.sound) { state.sound = true; store.set('sound', true); renderPanel(); }
+  const bus = squishSound(cur.id); if (bus) setTimeout(() => { fadeBus(bus); plip(); }, 450);
+}));
+document.querySelectorAll('.seg button[data-grip]').forEach((b) => b.addEventListener('click', () => {
+  grip = b.dataset.grip; store.set('grip', grip); renderPanel();
+}));
+$('#face').addEventListener('click', () => {
+  state.face = !state.face; store.set('face', state.face);
+  applyPreset('bao'); applyPreset('butter'); cur.pop.vel -= 2.4; renderPanel();
+});
+$('#sound').addEventListener('click', () => {
+  state.sound = !state.sound; store.set('sound', state.sound); renderPanel();
+  if (state.sound) { const b = squishSound('bao'); if (b) setTimeout(() => fadeBus(b), 400); }
+});
+
+function fit() {
+  if (view === 'hc') { hcFit(); return; }
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const narrow = w < 700 && h >= 520;
+  const ph = panel.getBoundingClientRect().height, th = top.getBoundingClientRect().height;
+  const tanH = Math.tan((camera.fov * Math.PI) / 360);
+  let availTop = 0, availH = h;
+  if (narrow) { availTop = th + 28; availH = Math.max(220, h - ph - th - 56); }
+  const bandCenter = availTop + availH / 2;
+  const shift = narrow ? h / 2 - bandCenter : 0;
+  const shiftX = narrow ? 0 : -panel.getBoundingClientRect().right / 2;
+  if (shift || shiftX) camera.setViewOffset(w, h, shiftX, shift, w, h); else camera.clearViewOffset();
+  const distH = (cur.cfg.needH / (2 * tanH)) * (h / availH);
+  const distW = (cur.cfg.needW * 1.12) / (2 * tanH * camera.aspect);
+  camDistTarget = Math.min(16, Math.max(4.2, distH, distW));
+  lookYTarget = cur.cfg.lookY;
+  camera.updateProjectionMatrix();
+  // hint sits above the panel on phones, beside it on wider screens
+  if (narrow) { hint.style.left = '50%'; hint.style.bottom = `calc(${ph + 28}px + env(safe-area-inset-bottom, 0px))`; }
+  else { const pr = panel.getBoundingClientRect().right; hint.style.left = `${(pr + w) / 2}px`; hint.style.bottom = 'calc(28px + env(safe-area-inset-bottom, 0px))'; }
+}
+addEventListener('resize', fit);
+new ResizeObserver(fit).observe(panel);
+
+/* ---------- loop ---------- */
+let last = performance.now(), clock = 0, lastText = '';
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt; idle += dt;
+  if (view === 'hc') { hcFrame(dt, now); requestAnimationFrame(frame); return; }
+
+  if (reshaping > 0) {
+    reshaping -= dt;
+    const k = reshaping > 0 ? 1 - Math.exp(-dt * 7) : 1;
+    for (const m of cur.def) {
+      const r = m.userData.rest, o = m.userData.orig;
+      for (let i = 0; i < r.length; i++) r[i] += (o[i] - r[i]) * k;
+      refreshRestNormals(m);
+    }
+  }
+  stepDents(cur, dt);
+  deform(cur);
+
+  for (const s of Object.values(sq)) {
+    if (!s.holder.visible) continue;
+    const p = s.pop;
+    if (p.delay > 0) { p.delay -= dt; s.holder.scale.setScalar(0.0001); continue; }
+    const a = 200 * (p.target - p.v) - 15 * p.vel;
+    p.vel += a * dt; p.v += p.vel * dt;
+    if (p.target === 0 && p.v < 0.03) { s.holder.visible = false; p.v = 0; p.vel = 0; continue; }
+    let sx = 1, sy = 1;
+    if (s === cur && s.cfg.phys.mode !== 'plastic') {
+      let tot = 0, hand = 0;
+      for (const d of s.dents) { if (d.kind === 'palm') hand += d.depth; else tot += d.depth; }
+      tot = Math.max(-0.6, Math.min(1.6, tot / s.cfg.phys.max));
+      hand = Math.max(-0.6, Math.min(2, hand / s.cfg.phys.max));
+      sx = 1 + 0.035 * tot - 0.025 * hand; sy = 1 - 0.055 * tot + 0.06 * hand;
+    }
+    s.squash = { x: sx, y: sy };
+    s.holder.scale.setScalar(Math.max(0.0001, p.v));
+  }
+
+  if (spinId === null) {
+    turntable.rotation.y += spinVel * dt; spinVel *= Math.exp(-dt * 3);
+    if (idle > 3) {
+      const home = Math.round(turntable.rotation.y / (Math.PI * 2)) * Math.PI * 2;
+      const target = home + (reduced ? 0 : Math.sin(clock * 0.5) * 0.22);
+      turntable.rotation.y += (target - turntable.rotation.y) * (1 - Math.exp(-dt * 0.9));
+      turntable.rotation.x += (0 - turntable.rotation.x) * (1 - Math.exp(-dt * 1.2));
+    }
+  }
+
+  camDist += (camDistTarget - camDist) * (1 - Math.exp(-dt * 4));
+  camTarget.y += (lookYTarget - camTarget.y) * (1 - Math.exp(-dt * 4));
+  camera.position.copy(camTarget).addScaledVector(camDir, camDist);
+  camera.lookAt(camTarget);
+
+  if (riseStart !== null && !cur.dents.some((d) => d.held)) {
+    const deep = cur.dents.reduce((m, d) => Math.max(m, Math.abs(d.depth)), 0);
+    const secs = (now - riseStart) / 1000;
+    let txt;
+    if (deep < 0.012) { txt = `${secs.toFixed(1)} s`; riseStart = null; }
+    else txt = `${secs.toFixed(1)} s…`;
+    if (txt !== lastText) { $('#last').textContent = txt; lastText = txt; }
+  }
+
+  renderer.render(scene, camera);
+  drawTips();
+  requestAnimationFrame(frame);
+}
+
+/* =================== HARDCORE MODE =================== */
+let view = 'shelf';
+const V3 = THREE.Vector3;
+const UP = new V3(0, 1, 0), Z1 = new V3(0, 0, 1);
+const _m4 = new THREE.Matrix4(), _p = new V3(), _s = new V3(), _v = new V3(), _v2 = new V3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _c = new THREE.Color();
+const HC = { W: 5.5, D: 5, F: 5, C: 5.2 };
+const rnd = (a, b) => a + Math.random() * (b - a);
+const randUnit = (v = new V3()) => { do { v.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)); } while (v.lengthSq() > 1 || v.lengthSq() < 0.01); return v.normalize(); };
+
+const hcScene = new THREE.Scene();
+hcScene.background = new THREE.Color('#070405');
+hcScene.fog = new THREE.Fog('#070405', 11, 26);
+hcScene.environment = scene.environment;
+hcScene.environmentIntensity = 0.7;
+const hcCam = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+const hcCamBase = new V3(0, 3.8, 11.5), hcLook = new V3(0, 1.6, 0);
+hcScene.add(new THREE.HemisphereLight('#c9b8b0', '#1a0607', 0.42));
+const hcKey = new THREE.DirectionalLight('#d9e2c4', 1.35);
+hcKey.position.set(-4, 9, 6); hcKey.castShadow = true; hcKey.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
+Object.assign(hcKey.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 30 });
+hcKey.shadow.bias = -0.0006; hcKey.shadow.radius = 4;
+hcScene.add(hcKey);
+const hcRim = new THREE.PointLight('#ff1424', 45, 20, 2); hcRim.position.set(3.5, 4, -3); hcScene.add(hcRim);
+const hcBoomLight = new THREE.PointLight('#ff9a3c', 0, 14, 2); hcScene.add(hcBoomLight);
+
+function tileTex(base, line, reps, seed = 5) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = base; x.fillRect(0, 0, 256, 256);
+  const r = rng(seed);
+  // grime, damp patches and old dried stains
+  for (let i = 0; i < 26; i++) {
+    const gx = r() * 256, gy = r() * 256, gr = 10 + r() * 60, g = x.createRadialGradient(gx, gy, 0, gx, gy, gr);
+    const stain = r() < 0.25;
+    g.addColorStop(0, stain ? `rgba(70,6,10,${0.18 + r() * 0.25})` : `rgba(0,0,0,${0.12 + r() * 0.2})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  }
+  for (let i = 0; i < 1400; i++) { x.fillStyle = `rgba(255,240,230,${r() * 0.03})`; x.fillRect(r() * 256, r() * 256, 2, 2); }
+  x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1;
+  for (let i = 0; i < 6; i++) { x.beginPath(); let px = r() * 256, py = r() * 256; x.moveTo(px, py); for (let k = 0; k < 5; k++) { px += (r() - 0.5) * 40; py += (r() - 0.5) * 40; x.lineTo(px, py); } x.stroke(); }
+  x.strokeStyle = line; x.lineWidth = 4; x.strokeRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(reps[0], reps[1]); t.anisotropy = 8;
+  return t;
+}
+// The room is rebuilt to fit the screen: walls, ceiling and front edge always stay in view.
+const roomTex = { floor: tileTex('#231b1a', '#120c0c', [1, 1], 3), back: tileTex('#2a2120', '#171010', [1, 1], 7), side: tileTex('#322626', '#1b1212', [1, 1], 11) };
+const roomMats = {
+  floor: new THREE.MeshStandardMaterial({ map: roomTex.floor, roughness: 0.75 }),
+  back: new THREE.MeshStandardMaterial({ map: roomTex.back, roughness: 0.9 }),
+  side: new THREE.MeshStandardMaterial({ map: roomTex.side, roughness: 0.88 }),
+  glow: new THREE.MeshBasicMaterial({ color: '#a3101d' }), cool: new THREE.MeshBasicMaterial({ color: '#4a0b11' }),
+  ceil: new THREE.MeshBasicMaterial({ color: '#a3101d', transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }),
+};
+let roomGroup = null, roomKey = '';
+function buildRoom() {
+  const key = [HC.W, HC.F, HC.C].map((v) => v.toFixed(2)).join();
+  if (key === roomKey) return; roomKey = key;
+  if (roomGroup) { hcScene.remove(roomGroup); roomGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.dispose && o.isLight) o.dispose(); }); }
+  const g = roomGroup = new THREE.Group(); hcScene.add(g);
+  const T = 1.4, wallLen = HC.D + HC.F, zc = (HC.F - HC.D) / 2, floorLen = HC.D + HC.F;
+  roomTex.floor.repeat.set(HC.W * 2 / T, floorLen / T); roomTex.back.repeat.set(HC.W * 2 / T, 9 / T * 0.75); roomTex.side.repeat.set(wallLen / T, 9 / T * 0.75);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(HC.W * 2, floorLen), roomMats.floor);
+  floor.rotation.x = -Math.PI / 2; floor.position.z = zc; floor.receiveShadow = true; g.add(floor);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(HC.W * 2, 9), roomMats.back); back.position.set(0, 4.5, -HC.D); back.receiveShadow = true; g.add(back);
+  for (const sgn of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(wallLen, 9), roomMats.side);
+    w.rotation.y = -sgn * Math.PI / 2; w.position.set(sgn * HC.W, 4.5, zc); w.receiveShadow = true; g.add(w);
+  }
+  const bar = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); g.add(b); };
+  bar(HC.W * 2, 0.06, 0.06, 0, HC.C, -HC.D + 0.03, roomMats.glow);
+  bar(0.06, 0.06, wallLen, -HC.W + 0.03, HC.C, zc, roomMats.glow); bar(0.06, 0.06, wallLen, HC.W - 0.03, HC.C, zc, roomMats.glow);
+  bar(HC.W * 2, 0.04, 0.04, 0, 0.02, -HC.D + 0.02, roomMats.cool);
+  bar(0.04, 0.04, wallLen, -HC.W + 0.02, 0.02, zc, roomMats.cool); bar(0.04, 0.04, wallLen, HC.W - 0.02, 0.02, zc, roomMats.cool);
+  bar(0.05, HC.C, 0.05, -HC.W + 0.03, HC.C / 2, -HC.D + 0.03, roomMats.glow); bar(0.05, HC.C, 0.05, HC.W - 0.03, HC.C / 2, -HC.D + 0.03, roomMats.glow);
+  // front edges: the room is a closed box outline that always fits on screen
+  bar(HC.W * 2 + 0.08, 0.05, 0.05, 0, 0.025, HC.F, roomMats.glow);
+  bar(0.05, HC.C, 0.05, -HC.W, HC.C / 2, HC.F, roomMats.glow); bar(0.05, HC.C, 0.05, HC.W, HC.C / 2, HC.F, roomMats.glow);
+  bar(HC.W * 2 + 0.08, 0.05, 0.05, 0, HC.C, HC.F, roomMats.glow);
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(HC.W * 2, 0.25, 0.04), roomMats.side); lip.position.set(0, -0.125, HC.F); g.add(lip);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HC.W * 2, wallLen), roomMats.ceil); ceil.rotation.x = Math.PI / 2; ceil.position.set(0, HC.C, zc); g.add(ceil);
+  const lL = new THREE.PointLight('#ff3a1a', 18, 12, 2); lL.position.set(-HC.W + 1, Math.min(3, HC.C - 0.5), -1); g.add(lL);
+  const lR = new THREE.PointLight('#b3121f', 24, 12, 2); lR.position.set(HC.W - 1, Math.min(3, HC.C - 0.5), -1); g.add(lR);
+  hcRim.position.set(Math.min(3.5, HC.W - 1), Math.min(4, HC.C - 0.6), -3);
+}
+// how big the squishy should be for the current room: full size on big screens,
+// smaller on small ones so it always has space to move, splat and be thrown around
+function hcSizeFor(type) {
+  const room = Math.min(HC.W / 3.8, HC.C / 3.6, (HC.D + HC.F) / 7.5);
+  const cap = type === 'butter' ? (HC.W * 2 * 0.5) / 2.4 : type === 'jelly' ? Math.min((HC.C * 0.48) / 1.7, (HC.W * 2 * 0.45) / 2) : (HC.W * 2 * 0.5) / 2.1;
+  const live = hcList.filter((x) => !x.dead).length;
+  const crowd = live > 4 ? Math.max(0.55, Math.sqrt(4 / live)) : 1;      // more squishies, a bit smaller each
+  return Math.max(0.3, Math.min(1, room, cap) * crowd);
+}
+// find the biggest room whose corners all land inside the visible area (between top controls and weapon bar)
+function fitRoom(topPx, bottomPx) {
+  const w = innerWidth, h = innerHeight, m = 10, q = new V3();
+  hcCam.position.copy(hcCamBase); hcCam.lookAt(hcLook); hcCam.updateMatrixWorld(); hcCam.updateProjectionMatrix();
+  const yMin = Math.max(0, topPx) + 6, yMax = Math.min(h, bottomPx) - 4;
+  const onScreen = (x, y, z) => { q.set(x, y, z).project(hcCam); const sx = (q.x + 1) / 2 * w, sy = (1 - q.y) / 2 * h; return q.z < 1 && sx >= m && sx <= w - m && sy >= yMin && sy <= yMax; };
+  const fits = (W, F, C) => onScreen(-W, C, -HC.D) && onScreen(W, C, -HC.D) && onScreen(-W, 0, F) && onScreen(W, 0, F) && onScreen(-W, C, F) && onScreen(W, C, F);
+  // balance height (room to throw), width and depth; a cramped ceiling is the worst outcome
+  let best = null, bestScore = -1;
+  for (let C = 5.2; C >= 2.39; C -= 0.15)
+    for (let W = 5.5; W >= 2.39; W -= 0.15) {
+      let F = 5; while (F >= 1.2 && !fits(W, F, C)) F -= 0.25;
+      if (F < 1.2) continue;
+      const score = 1.6 * Math.min(1, (C - 2.4) / 2) + Math.min(1, (W - 2.4) / 2.6) + 0.8 * Math.min(1, (F - 1.2) / 2.8);
+      if (score > bestScore) { bestScore = score; best = { W, F, C }; }
+    }
+  Object.assign(HC, best || { W: 2.4, F: 1.2, C: 2.8 });
+  buildRoom();
+  saveCtx(); for (const st of hcList) st.size = hcSizeFor(st.type); if (hcActive) hc.size = hcActive.size;
+}
+const hcRoot = new THREE.Group(); hcScene.add(hcRoot);
+
+/* ---- particles: liquid / foam drops ---- */
+const DMAX = 1800;
+const dropMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 0.1, metalness: 0, transparent: true, opacity: 0.9 }), DMAX);
+dropMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); dropMesh.frustumCulled = false; dropMesh.castShadow = true;
+const DR = { p: new Float32Array(DMAX * 3), v: new Float32Array(DMAX * 3), life: new Float32Array(DMAX), size: new Float32Array(DMAX), kind: new Uint8Array(DMAX), stuck: new Uint8Array(DMAX), col: new Float32Array(DMAX * 3), next: 0 };
+_m4.makeScale(0, 0, 0);
+for (let i = 0; i < DMAX; i++) { dropMesh.setMatrixAt(i, _m4); dropMesh.setColorAt(i, _c.set('#ffffff')); }
+function spawnDrop(p, v, color, size, kind = 0) {
+  size *= hc.sizeCur || 1;
+  const i = DR.next; DR.next = (DR.next + 1) % DMAX; const i3 = i * 3;
+  DR.p[i3] = p.x; DR.p[i3 + 1] = p.y; DR.p[i3 + 2] = p.z;
+  DR.v[i3] = v.x; DR.v[i3 + 1] = v.y; DR.v[i3 + 2] = v.z;
+  DR.life[i] = kind ? 16 : 6; DR.size[i] = size; DR.kind[i] = kind; DR.stuck[i] = 0;
+  DR.col[i3] = color.r; DR.col[i3 + 1] = color.g; DR.col[i3 + 2] = color.b;
+  dropMesh.setColorAt(i, color); dropMesh.instanceColor.needsUpdate = true;
+}
+/* ---- splats on floor / walls ---- */
+const SMAX = 6000;
+const splatMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 14), new THREE.MeshStandardMaterial({ roughness: 0.15, metalness: 0, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), SMAX);
+splatMesh.frustumCulled = false; splatMesh.receiveShadow = true;
+for (let i = 0; i < SMAX; i++) { splatMesh.setMatrixAt(i, _m4); splatMesh.setColorAt(i, _c.set('#ffffff')); }
+let sNext = 0, sCount = 0;
+const _sq = new THREE.Quaternion();
+const SP = { p: new Float32Array(SMAX * 3), n: new Float32Array(SMAX * 3), sx: new Float32Array(SMAX), sy: new Float32Array(SMAX), rot: new Float32Array(SMAX), z: new Float32Array(SMAX), col: new Float32Array(SMAX * 3) };
+function placeSplat(i) {
+  const i3 = i * 3; _v2.set(SP.n[i3], SP.n[i3 + 1], SP.n[i3 + 2]);
+  _sq.setFromUnitVectors(Z1, _v2); _q2.setFromAxisAngle(Z1, SP.rot[i]); _sq.multiply(_q2);
+  _p.set(SP.p[i3], SP.p[i3 + 1], SP.p[i3 + 2]).addScaledVector(_v2, SP.z[i]);
+  _s.set(SP.sx[i], SP.sy[i], 1); _m4.compose(_p, _sq, _s); splatMesh.setMatrixAt(i, _m4);
+}
+// Splats stay. A drop landing on a fresh splat of the same colour grows it into a puddle instead of
+// adding a new mark, so the room can hold a huge mess without old splats being recycled.
+function spawnSplat(p, n, size, color, merge = true) {
+  size *= hc.sizeCur || 1;
+  if (merge) for (let k = 1; k <= Math.min(64, sCount); k++) {
+    const j = (sNext - k + SMAX) % SMAX, j3 = j * 3;
+    if (SP.n[j3] * n.x + SP.n[j3 + 1] * n.y + SP.n[j3 + 2] * n.z < 0.95) continue;
+    const r = (SP.sx[j] + SP.sy[j]) * 0.5, d = Math.hypot(SP.p[j3] - p.x, SP.p[j3 + 1] - p.y, SP.p[j3 + 2] - p.z);
+    const dc = Math.abs(SP.col[j3] - color.r) + Math.abs(SP.col[j3 + 1] - color.g) + Math.abs(SP.col[j3 + 2] - color.b);
+    if (d < r * 0.9 && dc < 0.3 && r < 1.5) {
+      const grow = Math.sqrt(1 + (size * size * 0.45) / (r * r));
+      SP.sx[j] *= grow; SP.sy[j] *= grow; placeSplat(j);
+      splatMesh.instanceMatrix.needsUpdate = true; return;
+    }
+  }
+  const i = sNext, i3 = i * 3;
+  SP.p[i3] = p.x; SP.p[i3 + 1] = p.y; SP.p[i3 + 2] = p.z; SP.n[i3] = n.x; SP.n[i3 + 1] = n.y; SP.n[i3 + 2] = n.z;
+  SP.sx[i] = size * rnd(0.8, 1.4); SP.sy[i] = size * rnd(0.7, 1.1); SP.rot[i] = Math.random() * 6.283; SP.z[i] = 0.004 + (i % 80) * 0.0002;
+  SP.col[i3] = color.r; SP.col[i3 + 1] = color.g; SP.col[i3 + 2] = color.b;
+  placeSplat(i); splatMesh.setColorAt(i, color);
+  sNext = (sNext + 1) % SMAX; sCount = Math.min(SMAX, sCount + 1);
+  splatMesh.instanceMatrix.needsUpdate = true; splatMesh.instanceColor.needsUpdate = true;
+}
+/* ---- foam that has landed stays where it fell ---- */
+const FOMAX = 3000;
+const foamMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: 0.75 }), FOMAX);
+foamMesh.frustumCulled = false; foamMesh.receiveShadow = true;
+for (let i = 0; i < FOMAX; i++) { foamMesh.setMatrixAt(i, _m4); foamMesh.setColorAt(i, _c.set('#ffffff')); }
+let foNext = 0;
+function spawnFoamBlob(p, n, size, color) {
+  _q.setFromUnitVectors(UP, n); _q2.setFromAxisAngle(UP, Math.random() * 6.283); _q.multiply(_q2);
+  _s.set(size * rnd(0.9, 1.3), size * rnd(0.45, 0.7), size * rnd(0.9, 1.3));
+  _m4.compose(p, _q, _s); foamMesh.setMatrixAt(foNext, _m4); foamMesh.setColorAt(foNext, color);
+  foNext = (foNext + 1) % FOMAX;
+  foamMesh.instanceMatrix.needsUpdate = true; foamMesh.instanceColor.needsUpdate = true;
+}
+function clearSplats() {
+  // wipe everything left in the room: splats, scorch marks, drops, foam, torn pieces, fire, leftover halves
+  _m4.makeScale(0, 0, 0);
+  for (let i = 0; i < SMAX; i++) splatMesh.setMatrixAt(i, _m4);
+  for (let i = 0; i < FOMAX; i++) foamMesh.setMatrixAt(i, _m4);
+  foamMesh.instanceMatrix.needsUpdate = true; sCount = 0; foNext = 0;
+  for (let i = 0; i < DMAX; i++) { DR.life[i] = 0; DR.stuck[i] = 0; dropMesh.setMatrixAt(i, _m4); }
+  for (let i = 0; i < FMAX; i++) { FR.life[i] = 0; fragMesh.setMatrixAt(i, _m4); }
+  splatMesh.instanceMatrix.needsUpdate = dropMesh.instanceMatrix.needsUpdate = fragMesh.instanceMatrix.needsUpdate = true;
+  PR.life.fill(0); pGeo.attributes.aAlpha.array.fill(0); pGeo.attributes.aSize.array.fill(0);
+  SM.life.fill(0); smGeo.attributes.aAlpha.array.fill(0); smGeo.attributes.aAlpha.needsUpdate = true;
+  pGeo.attributes.aAlpha.needsUpdate = pGeo.attributes.aSize.needsUpdate = true;
+  sNext = 0;
+  for (const h of hc.halves) { hcScene.remove(h.group); h.mesh.geometry.dispose(); }
+  hc.halves = [];
+  saveCtx();
+  for (const st of hcList.slice()) if (st.dead) hcRemove(st);
+  if (!hcList.length) hcAdd(hc.addType || 'bao');
+  else { loadCtx(hcList[hcList.length - 1]); focusOn(hcActive); }
+  hcRenderUI();
+}
+/* ---- skin fragments ---- */
+const FMAX = 240;
+const fragMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.35 }), FMAX);
+fragMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); fragMesh.frustumCulled = false; fragMesh.castShadow = true;
+const FR = { p: new Float32Array(FMAX * 3), v: new Float32Array(FMAX * 3), q: Array.from({ length: FMAX }, () => new THREE.Quaternion()), w: new Float32Array(FMAX * 3), life: new Float32Array(FMAX), size: new Float32Array(FMAX), next: 0 };
+for (let i = 0; i < FMAX; i++) { fragMesh.setMatrixAt(i, _m4); fragMesh.setColorAt(i, _c.set('#ffffff')); }
+function spawnFrag(p, v, color, size) {
+  size *= hc.sizeCur || 1;
+  const i = FR.next; FR.next = (FR.next + 1) % FMAX; const i3 = i * 3;
+  FR.p[i3] = p.x; FR.p[i3 + 1] = p.y; FR.p[i3 + 2] = p.z; FR.v[i3] = v.x; FR.v[i3 + 1] = v.y; FR.v[i3 + 2] = v.z;
+  FR.q[i].set(Math.random(), Math.random(), Math.random(), Math.random()).normalize();
+  FR.w[i3] = rnd(-12, 12); FR.w[i3 + 1] = rnd(-12, 12); FR.w[i3 + 2] = rnd(-12, 12);
+  FR.life[i] = 1e9; FR.size[i] = size;
+  fragMesh.setColorAt(i, color); fragMesh.instanceColor.needsUpdate = true;
+}
+/* ---- fire / sparks ---- */
+const PMAX = 1600;
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PMAX * 3), 3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(PMAX), 1).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(PMAX * 3), 3).setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(PMAX), 1).setUsage(THREE.DynamicDrawUsage));
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uScale: { value: 800 } },
+  vertexShader: 'attribute float aSize; attribute vec3 aColor; attribute float aAlpha; uniform float uScale; varying vec3 vC; varying float vA; void main(){ vC=aColor; vA=aAlpha; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=aSize*uScale/max(0.1,-mv.z); gl_Position=projectionMatrix*mv; }',
+  fragmentShader: 'varying vec3 vC; varying float vA; void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d); if(r>0.5) discard; float a=smoothstep(0.5,0.0,r)*vA; gl_FragColor=vec4(vC*a,a); }',
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const firePts = new THREE.Points(pGeo, pMat); firePts.frustumCulled = false;
+const PR = { v: new Float32Array(PMAX * 3), life: new Float32Array(PMAX), max: new Float32Array(PMAX), size: new Float32Array(PMAX), kind: new Uint8Array(PMAX), next: 0 };
+function spawnFire(p, v, life, size, kind = 0) {
+  const i = PR.next; PR.next = (PR.next + 1) % PMAX; const i3 = i * 3, pa = pGeo.attributes.position.array;
+  pa[i3] = p.x; pa[i3 + 1] = p.y; pa[i3 + 2] = p.z; PR.v[i3] = v.x; PR.v[i3 + 1] = v.y; PR.v[i3 + 2] = v.z;
+  PR.life[i] = PR.max[i] = life; PR.size[i] = size; PR.kind[i] = kind;
+}
+const SMKMAX = 600;
+const smGeo = new THREE.BufferGeometry();
+smGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SMKMAX * 3), 3).setUsage(THREE.DynamicDrawUsage));
+smGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(SMKMAX), 1).setUsage(THREE.DynamicDrawUsage));
+smGeo.setAttribute('aColor', new THREE.BufferAttribute(new Float32Array(SMKMAX * 3), 3).setUsage(THREE.DynamicDrawUsage));
+smGeo.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(SMKMAX), 1).setUsage(THREE.DynamicDrawUsage));
+const smMat = new THREE.ShaderMaterial({
+  uniforms: { uScale: pMat.uniforms.uScale },
+  vertexShader: pMat.vertexShader,
+  fragmentShader: 'varying vec3 vC; varying float vA; void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d); if(r>0.5) discard; float a=smoothstep(0.5,0.05,r)*vA; gl_FragColor=vec4(vC,a); }',
+  transparent: true, depthWrite: false,
+});
+const smokePts = new THREE.Points(smGeo, smMat); smokePts.frustumCulled = false;
+const SM = { v: new Float32Array(SMKMAX * 3), life: new Float32Array(SMKMAX), max: new Float32Array(SMKMAX), size: new Float32Array(SMKMAX), next: 0 };
+function spawnSmoke(p, v, life, size) {
+  const i = SM.next; SM.next = (SM.next + 1) % SMKMAX; const i3 = i * 3, pa = smGeo.attributes.position.array;
+  pa[i3] = p.x; pa[i3 + 1] = p.y; pa[i3 + 2] = p.z; SM.v[i3] = v.x; SM.v[i3 + 1] = v.y; SM.v[i3 + 2] = v.z;
+  SM.life[i] = SM.max[i] = life; SM.size[i] = size * (hc.sizeCur || 1);
+}
+function stepSmoke(dt) {
+  const pa = smGeo.attributes.position.array, sa = smGeo.attributes.aSize.array, ca = smGeo.attributes.aColor.array, aa = smGeo.attributes.aAlpha.array;
+  for (let i = 0; i < SMKMAX; i++) {
+    if (SM.life[i] <= 0) { aa[i] = 0; sa[i] = 0; continue; }
+    const i3 = i * 3; SM.life[i] -= dt; const t = Math.max(0, SM.life[i] / SM.max[i]);
+    SM.v[i3] *= Math.exp(-dt * 1.2); SM.v[i3 + 2] *= Math.exp(-dt * 1.2); SM.v[i3 + 1] = SM.v[i3 + 1] * Math.exp(-dt * 0.6) + 0.9 * dt;
+    pa[i3] += SM.v[i3] * dt; pa[i3 + 1] = Math.min(HC.C, pa[i3 + 1] + SM.v[i3 + 1] * dt); pa[i3 + 2] += SM.v[i3 + 2] * dt;
+    sa[i] = SM.size[i] * (1 + (1 - t) * 3);
+    const g = 0.05 + (1 - t) * 0.08; ca[i3] = g; ca[i3 + 1] = g * 0.92; ca[i3 + 2] = g * 0.9;
+    aa[i] = Math.min(1, (1 - t) * 6) * t * 0.55;
+  }
+  for (const k of ['position', 'aSize', 'aColor', 'aAlpha']) smGeo.attributes[k].needsUpdate = true;
+}
+hcScene.add(dropMesh, splatMesh, fragMesh, firePts, smokePts, foamMesh);
+
+/* ---- state ---- */
+const HC_MAX = { bao: 100, butter: 120, jelly: 70 };
+const TOOLS = ['pin', 'pistol', 'shotgun', 'bazooka', 'hammer', 'axe', 'flame', 'throw', 'cracker'];
+const HINTS = {
+  pin: 'Click to poke a hole. Jelly pops right away, the others start leaking.',
+  pistol: 'Click to shoot. Bullets go in one side and out the other.',
+  shotgun: 'Click to blast a spread of pellets.',
+  bazooka: 'Click to fire a rocket. It explodes on whatever it hits.',
+  hammer: 'Click to smash it.',
+  axe: 'Click to chop. Three chops split it in half.',
+  flame: 'Hold and sweep to burn and melt it.',
+  throw: 'Grab it and fling it at the floor or walls. It dents but never pops. Jelly sticks to walls.',
+  cracker: 'Click to stick a firecracker on it, then wait.',
+};
+const hc = { addType: null, pick: null, sqDir: new V3(0, 1, 0), sqC: new V3(), size: 1, sizeCur: 1, flick: 0, relax: false, anims: [], type: 'bao', s: null, body: null, halves: [], dead: false, split: false, integ: 100, max: 100, tool: 'pistol', holes: [], queue: [], crackers: [], rockets: [], chops: 0, fill: 1, sq: 0, sqV: 0, shake: 0, flash: 0, fire: false, fireAcc: 0, meltAcc: 0, grab: null, grabTarget: null, grabHist: [], ptr: { x: 0, y: 0 }, grace: 0 };
+const grabPlane = new THREE.Plane(), grabOff = new V3();
+
+const hcPreset = () => TYPES[hc.type].presets[hc.pick ?? (state.pick[hc.type] || 0)];
+/* ---- several squishies in one room ----
+   Each squishy keeps its own state. The weapon code works on "hc", so before touching a squishy
+   we swap its state into hc (loadCtx) and swap it back out afterwards (saveCtx). */
+const PER = ['type', 'pick', 's', 'body', 'dead', 'split', 'integ', 'max', 'holes', 'queue', 'anims', 'crackers', 'chops', 'fill', 'sq', 'sqV', 'sqDir', 'sqC', 'size', 'sizeCur', 'relax', 'relaxAcc', 'grace'];
+const hcList = []; let hcActive = null, hcFocus = null;
+function saveCtx() { if (hcActive) for (const k of PER) hcActive[k] = hc[k]; }
+function loadCtx(st) { if (!st || st === hcActive) return; saveCtx(); hcActive = st; for (const k of PER) hc[k] = st[k]; }
+function focusOn(st) { if (hcFocus !== st) { hcFocus = st; hcLastUI = ''; } }
+const hcBodyColor = () => { const p = hcPreset(); return new THREE.Color(p.grad ? p.grad[1] : p.base); };
+function hcFluid() {
+  if (hc.type === 'butter') return new THREE.Color('#fffaf0');
+  const c = hcBodyColor();
+  return hc.type === 'jelly' ? c : c.offsetHSL(0, 0.12, -0.06);
+}
+const hcFilling = () => hc.type === 'butter' ? new THREE.Color('#fbf3dc') : hc.type === 'jelly' ? hcBodyColor().offsetHSL(0, 0, -0.1) : hcFluid();
+const jitter = (c, a = 0.06) => c.clone().offsetHSL(0, 0, rnd(-a, a));
+const isFoam = () => (hc.type === 'butter' ? 1 : 0);
+const dropSize = () => (hc.type === 'butter' ? rnd(0.04, 0.1) : rnd(0.022, 0.055));
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+function slowDent(c, n, R, depth, dur, bulge = 0.25) { hc.anims.push({ d: mkDent(c, n, R, 0, bulge), total: depth, dur, t: 0 }); }
+function stepAnims(dt) {
+  if (!hc.anims.length || hc.dead) { if (hc.dead) hc.anims = []; return; }
+  const list = []; let done = false;
+  for (const a of hc.anims) {
+    const t0 = a.t; a.t = Math.min(a.dur, a.t + dt);
+    const inc = a.total * (ease(a.t / a.dur) - ease(t0 / a.dur));
+    if (inc) list.push({ ...a.d, depth: inc });
+    if (a.t >= a.dur) done = true;
+  }
+  hc.anims = hc.anims.filter((a) => a.t < a.dur);
+  if (list.length) hcBake(list, done ? 1 : 0);
+}
+const mkDent = (c, n, R, depth, bulge = 0.25) => ({ c, n: n.clone().normalize(), inv: 1 / (R * R), depth, bulge });
+
+function sampleIdx(mesh, keep) {
+  const arr = mesh.geometry.attributes.position.array, n = arr.length / 3, step = Math.max(1, Math.floor(n / 1800)), out = [];
+  for (let i = 0; i < n; i += step) if (!keep || keep(arr, i * 3)) out.push(i);
+  return Int32Array.from(out);
+}
+function hcRemove(st) {
+  saveCtx();
+  if (st.s) { hcRoot.remove(st.s.holder); st.s.holder.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+  if (hc.grab === st.body) { hc.grab = null; hc.grabTarget = null; canvas.classList.remove('grabbing'); }
+  hcList.splice(hcList.indexOf(st), 1);
+  if (hcActive === st) hcActive = null;
+  if (hcFocus === st) hcFocus = null;
+}
+function hcResetRoom(type) {
+  saveCtx();
+  for (const st of hcList.slice()) hcRemove(st);
+  for (const h of hc.halves) { hcScene.remove(h.group); h.mesh.geometry.dispose(); }
+  for (const r of hc.rockets) hcScene.remove(r.mesh);
+  hc.halves = []; hc.rockets = []; hc.grab = null;
+  hcAdd(type);
+}
+function hcAdd(type) {
+  saveCtx(); hcActive = null;
+  hc.type = type; hc.pick = state.pick[type] || 0;
+  const s = Object.assign(builders[type](hcRoot, true), { id: type, cfg: { phys: { mode: 'plastic', R: 0.5, max: 0.3, bulge: 0.3, inflate: 0, pin: 0.0001 } }, dents: [], contain: null });
+  s.apply(hcPreset(), state.face);
+  if (type === 'jelly') Object.assign(s.def[0].material, { transmission: 0.55, thickness: 0.5, roughness: 0.12 });
+  const r = s.def[0].userData.rest; let mn = Infinity;
+  for (let i = 1; i < r.length; i += 3) mn = Math.min(mn, r[i]);
+  s.floorY = mn; s.content.position.y = -mn;
+  hc.sqDir = new V3(0, 1, 0); hc.sqC = new V3(0, mn, 0);
+  for (const m of s.def) {
+    const g = m.geometry;
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
+    (Array.isArray(m.material) ? m.material : [m.material]).forEach((mt) => { mt.vertexColors = true; mt.needsUpdate = true; });
+  }
+  hc.s = s;
+  hc.size = hc.sizeCur = hcSizeFor(type);
+  hc.body = { group: s.holder, mesh: s.def[0], vel: new V3(), ang: new V3(), isMain: true, idx: sampleIdx(s.def[0]), stuck: null };
+  // the first one drops in the middle; the rest land somewhere free in the room
+  let x = 0, z = 0;
+  if (hcList.length) {
+    for (let tries = 0; tries < 20; tries++) {
+      x = rnd(-HC.W + 1.3, HC.W - 1.3); z = rnd(-HC.D + 1.3, Math.max(-HC.D + 1.4, Math.min(HC.F - 1.2, 1.5)));
+      if (hcList.every((o) => !o.s || o.dead || Math.hypot(o.s.holder.position.x - x, o.s.holder.position.z - z) > 1.9 * hc.size)) break;
+    }
+  }
+  s.holder.position.set(x, Math.min(2.4, HC.C - 1.4), z);
+  s.holder.rotation.y = hcList.length ? rnd(-0.6, 0.6) : 0;
+  Object.assign(hc, { dead: false, split: false, integ: HC_MAX[type], max: HC_MAX[type], holes: [], queue: [], anims: [], crackers: [], chops: 0, fill: 1, sq: 0, sqV: 0, grace: 1.1, relax: false, relaxAcc: 0 });
+  const st = {}; hcActive = st; saveCtx(); hcList.push(st); focusOn(st);
+  for (const o of hcList) o.size = hcSizeFor(o.type); hc.size = st.size;
+  hcRenderUI();
+  return st;
+}
+const hcTargets = () => { saveCtx(); const a = []; for (const st of hcList) if (st.s && !st.dead) a.push(...st.s.def); for (const h of hc.halves) a.push(h.mesh); return a; };
+// find which squishy a mesh belongs to and switch to it, so the weapon acts on that one
+const objOf = (mesh) => {
+  saveCtx();
+  for (const st of hcList) if (st.s && !st.dead && st.s.def.includes(mesh)) { loadCtx(st); focusOn(st); return hc.body; }
+  const h = hc.halves.find((x) => x.mesh === mesh);
+  if (h && h.owner) loadCtx(h.owner);
+  return h || null;
+};
+
+/* ---- permanent damage ---- */
+function hcBake(list, passes = 1) {
+  const s = hc.s; if (!s || hc.dead) return;
+  for (const m of s.def) {
+    const rest = m.userData.rest, rn = m.userData.restN;
+    for (let i3 = 0; i3 < rest.length; i3 += 3) {
+      const px = rest[i3], py = rest[i3 + 1], pz = rest[i3 + 2];
+      let dx = 0, dy = 0, dz = 0;
+      for (const d of list) {
+        const ex = px - d.c.x, ey = py - d.c.y, ez = pz - d.c.z;
+        const q = (ex * ex + ey * ey + ez * ez) * d.inv;
+        if (q > 16) continue;
+        const f = Math.exp(-q), ring = Math.exp(-q * 0.25);
+        const push = d.depth * f, bul = d.depth * (ring - f) * d.bulge;
+        dx += d.n.x * push + rn[i3] * bul; dy += d.n.y * push + rn[i3 + 1] * bul; dz += d.n.z * push + rn[i3 + 2] * bul;
+      }
+      rest[i3] = px + dx; rest[i3 + 1] = py + dy; rest[i3 + 2] = pz + dz;
+    }
+    if (passes) smoothRest(m, -99, passes);
+    if (hc.type === 'jelly' && m.userData.vol0) {
+      const v = meshVolume(rest, m.geometry.index.array), k = v > 0 ? Math.max(0.97, Math.min(1.06, Math.cbrt(m.userData.vol0 / v))) : 1, fl = s.floorY;
+      if (Math.abs(k - 1) > 1e-4) for (let i3 = 0; i3 < rest.length; i3 += 3) { rest[i3] *= k; rest[i3 + 2] *= k; rest[i3 + 1] = fl + (rest[i3 + 1] - fl) * k; }
+    }
+    refreshRestNormals(m);
+  }
+  for (const h of hc.holes) placeHole(h);
+  hc.relax = true;
+}
+function nearestVert(mesh, lp) {
+  const r = mesh.userData.rest; let best = 0, bd = Infinity;
+  for (let i = 0; i < r.length; i += 3) { const d = (r[i] - lp.x) ** 2 + (r[i + 1] - lp.y) ** 2 + (r[i + 2] - lp.z) ** 2; if (d < bd) { bd = d; best = i / 3; } }
+  return best;
+}
+const holeTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.3, 'rgba(0,0,0,0.96)'); g.addColorStop(0.4, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.4)'); g.addColorStop(0.74, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  const r = rng(9); x.strokeStyle = 'rgba(0,0,0,0.85)'; x.lineCap = 'round';
+  for (let i = 0; i < 9; i++) { const a = r() * 6.283, l = 22 + r() * 26; x.lineWidth = 2 + r() * 3; x.beginPath(); x.moveTo(64 + Math.cos(a) * 16, 64 + Math.sin(a) * 16); x.lineTo(64 + Math.cos(a) * l, 64 + Math.sin(a) * l); x.stroke(); }
+  return new THREE.CanvasTexture(c);
+})();
+const holeGeo = new THREE.CircleGeometry(1, 18);
+function placeHole(h) {
+  const r = h.mesh.userData.rest, n = h.mesh.userData.restN, i = h.vi * 3;
+  h.el.position.set(r[i] + n[i] * 0.006, r[i + 1] + n[i + 1] * 0.006, r[i + 2] + n[i + 2] * 0.006);
+  h.el.quaternion.setFromUnitVectors(Z1, _v.set(n[i], n[i + 1], n[i + 2]).normalize()); h.el.rotateZ(h.rot);
+}
+function addHole(mesh, vi, size, leak) {
+  const mat = new THREE.MeshBasicMaterial({ map: holeTex, color: hcBodyColor().multiplyScalar(0.5), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const el = new THREE.Mesh(holeGeo, mat); el.scale.setScalar(size); mesh.add(el);
+  const h = { el, vi, mesh, leak, acc: 0, rot: Math.random() * 6.283 }; hc.holes.push(h); placeHole(h);
+  return h;
+}
+function localOf(mesh, pW) { mesh.updateMatrixWorld(); return pW.clone().applyMatrix4(_m4.copy(mesh.matrixWorld).invert()); }
+function dirLocal(mesh, dW) { return dW.clone().transformDirection(_m4.copy(mesh.matrixWorld).invert()); }
+function worldNormal(hit) { return hit.face.normal.clone().transformDirection(hit.object.matrixWorld); }
+
+function spray(p, base, count, speed, spread, up = 0.5) {
+  const fl = hcFluid(), foam = isFoam();
+  for (let i = 0; i < count; i++) {
+    _v2.copy(base).multiplyScalar(speed * rnd(0.35, 1)).add(randUnit(_v).multiplyScalar(spread * Math.random()));
+    _v2.y += up * Math.random();
+    spawnDrop(p, _v2, jitter(fl), dropSize(), foam);
+  }
+}
+function chips(p, n, count, speed) {
+  const col = hcBodyColor();
+  for (let i = 0; i < count; i++) spawnFrag(p, _v2.copy(n).multiplyScalar(speed * rnd(0.3, 1)).add(randUnit(_v).multiplyScalar(speed * 0.5)).setY(_v2.y + 2), jitter(col, 0.08), rnd(0.05, 0.14));
+}
+function damage(amount, at, force = 1) {
+  if (hc.dead) return;
+  hc.integ -= amount * (hc.type === 'jelly' ? 1.4 : 1);
+  if (hc.integ <= 0) hcPop(at, force);
+}
+
+/* ---- the pop ---- */
+function hcPop(pW, force = 1) {
+  if (hc.dead || !hc.s) return;
+  hcFlush();
+  hc.dead = true; hc.integ = 0;
+  const s = hc.s, m = s.def[0]; m.updateMatrixWorld();
+  const arr = m.geometry.attributes.position.array, n = arr.length / 3, e = m.matrixWorld;
+  const center = new V3(); s.holder.getWorldPosition(center); center.y += 0.6 * s.holder.scale.y;
+  const fl = hcFluid(), col = hcBodyColor(), foam = isFoam();
+  const pick = () => { const k = (Math.random() * n | 0) * 3; return new V3(arr[k], arr[k + 1], arr[k + 2]).applyMatrix4(e); };
+  const count = hc.type === 'jelly' ? 420 : hc.type === 'butter' ? 300 : 340;
+  for (let i = 0; i < count; i++) {
+    const p = pick(), out = p.clone().sub(center).normalize();
+    const away = p.clone().sub(pW).normalize();
+    _v2.copy(out).multiplyScalar(rnd(1.5, 6) * force).addScaledVector(away, rnd(0, 3) * force); _v2.y += rnd(0.5, 3);
+    spawnDrop(p, _v2, jitter(fl), foam ? rnd(0.05, 0.13) : rnd(0.025, 0.07), foam);
+  }
+  for (let i = 0; i < 80; i++) {
+    const p = pick(), out = p.clone().sub(center).normalize();
+    spawnFrag(p, out.multiplyScalar(rnd(1.5, 6) * force).setY(rnd(1, 5) * force), jitter(col, 0.08), rnd(0.07, 0.22));
+  }
+  for (let i = 0; i < 9; i++) spawnSplat(new V3(center.x + rnd(-1.3, 1.3), 0, center.z + rnd(-1.3, 1.3)), UP, rnd(0.35, 0.9), jitter(fl));
+  s.holder.visible = false;
+  for (const c of hc.crackers) c.stick.removeFromParent();
+  hc.crackers = [];
+  hc.shake = Math.max(hc.shake, 0.7); hc.flash = Math.max(hc.flash, 0.2);
+  sPop();
+  hcRenderUI();
+}
+function hcSplit(lp, pn) {
+  if (hc.dead) return;
+  hcFlush();
+  const s = hc.s, m0 = s.def[0]; s.holder.updateMatrixWorld(true);
+  const wpos = new V3(), wq = new THREE.Quaternion(), ws = new V3(); m0.matrixWorld.decompose(wpos, wq, ws);
+  const geo = m0.geometry.clone(); geo.computeBoundingSphere();
+  const fill = hcFilling(), pnW = pn.clone().transformDirection(m0.matrixWorld);
+  for (const side of [1, -1]) {
+    const g = new THREE.Group(); g.position.copy(wpos); g.quaternion.copy(wq); g.scale.copy(ws); hcScene.add(g);
+    const localPlane = new THREE.Plane(pn.clone().multiplyScalar(side), -side * pn.dot(lp)), worldPlane = new THREE.Plane();
+    const src = Array.isArray(m0.material) ? m0.material : [m0.material];
+    const mats = src.map((mt) => { const c = mt.clone(); c.clippingPlanes = [worldPlane]; c.clipShadows = true; c.side = THREE.FrontSide; return c; });
+    const outer = new THREE.Mesh(geo, Array.isArray(m0.material) ? mats : mats[0]);
+    const inner = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: fill, roughness: 0.3, side: THREE.BackSide, clippingPlanes: [worldPlane], clipShadows: true }));
+    outer.castShadow = inner.castShadow = true; g.add(outer, inner);
+    const keep = (a, i3) => side * (pn.x * (a[i3] - lp.x) + pn.y * (a[i3 + 1] - lp.y) + pn.z * (a[i3 + 2] - lp.z)) > 0.03;
+    const vel = pnW.clone().multiplyScalar(side * rnd(2.5, 4)); vel.y += rnd(3, 5);
+    hc.halves.push({ owner: hcActive, group: g, mesh: outer, idx: sampleIdx(outer, keep), vel, ang: randUnit().multiplyScalar(rnd(2, 5)), localPlane, worldPlane, stuck: null });
+  }
+  // gush from the cut
+  const arr = geo.attributes.position.array, near = [];
+  for (let i = 0; i < arr.length; i += 3) if (Math.abs(pn.x * (arr[i] - lp.x) + pn.y * (arr[i + 1] - lp.y) + pn.z * (arr[i + 2] - lp.z)) < 0.08) near.push(i);
+  const fl = hcFluid(), foam = isFoam();
+  for (let i = 0; i < 260 && near.length; i++) {
+    const k = near[Math.random() * near.length | 0];
+    const p = new V3(arr[k], arr[k + 1], arr[k + 2]).applyMatrix4(m0.matrixWorld);
+    spawnDrop(p, randUnit(_v2).multiplyScalar(rnd(1, 4)).setY(rnd(0.5, 4)), jitter(fl), foam ? rnd(0.05, 0.12) : rnd(0.025, 0.065), foam);
+  }
+  for (let i = 0; i < 6; i++) spawnSplat(new V3(wpos.x + rnd(-1, 1), 0, wpos.z + rnd(-1, 1)), UP, rnd(0.35, 0.8), jitter(fl));
+  s.holder.visible = false; hc.dead = true; hc.split = true; hc.integ = 0;
+  for (const c of hc.crackers) c.stick.removeFromParent();
+  hc.crackers = [];
+  sPop(); hc.shake = Math.max(hc.shake, 0.5);
+  hcRenderUI();
+}
+function hcFlush() { if (hc.queue.length && !hc.dead) { const q = hc.queue; hc.queue = []; hcBake(q, 1); } }
+
+/* ---- weapons ---- */
+function roomHit(o, d) {
+  let best = null;
+  const test = (t, n) => { if (t > 0 && (!best || t < best.t)) { const p = o.clone().addScaledVector(d, t); if (p.y >= -0.01 && p.y <= HC.C + 0.01 && Math.abs(p.x) <= HC.W + 0.01 && p.z >= -HC.D - 0.01) best = { t, p, n }; } };
+  if (d.y < 0) test(-o.y / d.y, UP);
+  if (d.y > 0) test((HC.C - o.y) / d.y, new V3(0, -1, 0));
+  if (d.z < 0) test((-HC.D - o.z) / d.z, new V3(0, 0, 1));
+  if (d.x > 0) test((HC.W - o.x) / d.x, new V3(-1, 0, 0));
+  if (d.x < 0) test((-HC.W - o.x) / d.x, new V3(1, 0, 0));
+  return best;
+}
+const wallHoleCol = new THREE.Color('#09070c');
+function wound(hit, dir, size, isExit, pellet) {
+  const m = hit.object, o = objOf(m), nW = worldNormal(hit);
+  spray(hit.point, isExit ? dir : nW, pellet ? 12 : isExit ? 60 : 32, isExit ? 8 : 5, 1.6);
+  if (!o) return;
+  o.vel.addScaledVector(dir, pellet ? 0.3 : 1.0); o.vel.y += pellet ? 0.15 : 0.6; o.ang.add(randUnit(_v).multiplyScalar(pellet ? 0.5 : 1.5));
+  if (o.stuck) o.stuck = null;
+  if (!o.isMain || hc.dead) return;
+  const lp = localOf(m, hit.point);
+  const vi = [hit.face.a, hit.face.b, hit.face.c].reduce((b, i) => { const r = m.userData.rest; const d = (r[i * 3] - lp.x) ** 2 + (r[i * 3 + 1] - lp.y) ** 2 + (r[i * 3 + 2] - lp.z) ** 2; return d < b[1] ? [i, d] : b; }, [hit.face.a, Infinity])[0];
+  addHole(m, vi, size, (pellet ? 10 : isExit ? 40 : 26) * (hc.type === 'jelly' ? 1.6 : 1));
+  slowDent(lp, hit.face.normal.clone().negate(), pellet ? 0.15 : 0.24, (pellet ? 0.05 : 0.11) * (isExit ? 1.2 : 1), pellet ? 1.1 : rnd(1.4, 1.9), 0.18);
+  damage((pellet ? 4 : 10) * (isExit ? 0.6 : 1), hit.point, 1.1);
+}
+function shoot(origin, dir, size, pellet) {
+  const T = hcTargets(), hs = T.length ? ray.intersectObjects(T, false) : [];
+  let from = origin;
+  if (hs.length) {
+    const first = hs[0];
+    wound(first, dir, size, false, pellet);
+    const exit = hs.filter((h) => h.object === first.object && h.distance > first.distance + 0.05).pop();
+    if (exit) { wound(exit, dir, size * 1.5, true, pellet); from = exit.point; } else from = first.point;
+  }
+  const w = roomHit(from, dir);
+  if (w) { spawnSplat(w.p, w.n, size * 0.7, wallHoleCol, false); for (let i = 0; i < 5; i++) spawnFire(w.p, randUnit(_v).multiplyScalar(3).add(_v2.copy(w.n).multiplyScalar(2)), 0.25, 0.05, 1); }
+}
+function nozzle() {
+  hcCam.updateMatrixWorld();
+  const right = new V3(1, 0, 0).applyQuaternion(hcCam.quaternion), down = new V3(0, -1, 0).applyQuaternion(hcCam.quaternion), fwd = new V3(0, 0, -1).applyQuaternion(hcCam.quaternion);
+  return hcCam.position.clone().addScaledVector(right, 0.9).addScaledVector(down, 0.75).addScaledVector(fwd, 2.2);
+}
+function muzzle(dir, n = 12) { const p = nozzle(); for (let i = 0; i < n; i++) spawnFire(p, dir.clone().multiplyScalar(rnd(4, 10)).add(randUnit(_v).multiplyScalar(1.5)), rnd(0.08, 0.18), rnd(0.1, 0.25), 1); }
+function aim() { ndc.set(hc.ptr.x, hc.ptr.y); ray.setFromCamera(ndc, hcCam); return { o: ray.ray.origin.clone(), d: ray.ray.direction.clone() }; }
+function firePistol() {
+  const { o, d } = aim(); sGun(false); hc.flash = Math.max(hc.flash, 0.22); hc.flashCol = 'gun'; hc.shake = Math.max(hc.shake, 0.18); muzzle(d);
+  shoot(o, d, 0.075, false);
+}
+function fireShotgun() {
+  const { o, d } = aim(); sGun(true); hc.flash = Math.max(hc.flash, 0.38); hc.flashCol = 'gun'; hc.shake = Math.max(hc.shake, 0.45); muzzle(d, 24);
+  for (let i = 0; i < 9; i++) {
+    const dj = d.clone().add(randUnit(_v).multiplyScalar(0.07)).normalize();
+    ray.ray.origin.copy(o); ray.ray.direction.copy(dj);
+    shoot(o, dj, 0.045, true);
+  }
+}
+function fireBazooka() {
+  const { o, d } = aim(); const start = nozzle();
+  const T = hcTargets(), h = T.length ? ray.intersectObjects(T, false)[0] : null;
+  const target = h ? h.point : (roomHit(o, d) || { p: o.clone().addScaledVector(d, 30) }).p;
+  const dir = target.clone().sub(start).normalize();
+  const mesh = new THREE.Group();
+  const bodyM = new THREE.MeshStandardMaterial({ color: '#5d6b3c', roughness: 0.6, metalness: 0.3 });
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 12), bodyM);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 12), new THREE.MeshStandardMaterial({ color: '#c8452f', roughness: 0.5 })); tip.position.y = 0.3;
+  mesh.add(tube, tip);
+  for (let k = 0; k < 4; k++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.12, 0.1), bodyM); fin.position.y = -0.2; fin.rotation.y = k * Math.PI / 2; fin.translateZ(0.07); mesh.add(fin); }
+  mesh.scale.setScalar(0.7); mesh.position.copy(start).addScaledVector(dir, 0.8); mesh.quaternion.setFromUnitVectors(UP, dir); hcScene.add(mesh);
+  hc.rockets.push({ mesh, vel: dir.multiplyScalar(26), life: 3 });
+  sLaunch(); hc.shake = Math.max(hc.shake, 0.3); muzzle(dir, 30);
+}
+function explode(p) {
+  hc.flash = 0.9; hc.flashCol = 'boom'; hc.shake = 1.1; hcBoomLight.position.copy(p); hcBoomLight.intensity = 260;
+  sBoom();
+  for (let i = 0; i < 180; i++) spawnFire(p, randUnit(_v).multiplyScalar(rnd(2, 9)), rnd(0.4, 0.9), rnd(0.35, 0.8), 0);
+  for (let i = 0; i < 90; i++) spawnFire(p, randUnit(_v).multiplyScalar(rnd(6, 16)), rnd(0.3, 0.7), rnd(0.05, 0.12), 1);
+  const surf = roomHit(p.clone().add(new V3(0, 0.3, 0)), new V3(0, -1, 0));
+  if (p.y < 1.5) spawnSplat(new V3(p.x, 0, p.z), UP, rnd(0.9, 1.3), new THREE.Color('#0e0b0c'), false);
+  else if (Math.abs(Math.abs(p.x) - HC.W) < 0.3) spawnSplat(p, new V3(-Math.sign(p.x), 0, 0), 1.1, new THREE.Color('#0e0b0c'), false);
+  else if (Math.abs(p.z + HC.D) < 0.3) spawnSplat(p, new V3(0, 0, 1), 1.1, new THREE.Color('#0e0b0c'), false);
+  saveCtx();
+  for (const st of hcList.slice()) {
+    loadCtx(st);
+    if (!hc.s || hc.dead) continue;
+    const c = new V3(); hc.s.holder.getWorldPosition(c); c.y += 0.6 * hc.sizeCur;
+    const dist = c.distanceTo(p);
+    if (dist < 2.4) hcPop(p, 2.4);
+    else if (dist < 6) { const k = (6 - dist) / 6; hc.body.stuck = null; hc.body.vel.add(c.clone().sub(p).normalize().multiplyScalar(14 * k)).add(new V3(0, 6 * k, 0)); hc.body.ang.add(randUnit(_v).multiplyScalar(6 * k)); damage(45 * k, c, 1.6); }
+  }
+  saveCtx();
+  for (const h of hc.halves) { const c = h.group.position, dist = c.distanceTo(p); if (dist < 6) { const k = (6 - dist) / 6; h.stuck = null; h.vel.add(c.clone().sub(p).normalize().multiplyScalar(14 * k)).add(new V3(0, 6 * k, 0)); h.ang.add(randUnit(_v).multiplyScalar(8 * k)); } }
+}
+function hammer(hit) {
+  const m = hit.object, o = objOf(m), dir = ray.ray.direction.clone();
+  sThud(1); hc.shake = Math.max(hc.shake, 0.5);
+  if (!o) return;
+  if (!o.isMain) spray(hit.point, worldNormal(hit), 16, 3, 1.2);   // a split half is already open
+  if (o.stuck) o.stuck = null;
+  o.vel.addScaledVector(dir, 2.2);
+  if (!o.isMain || hc.dead) return;
+  hc.queue.push(mkDent(localOf(m, hit.point), dirLocal(m, dir), 0.62, 0.42, 0.38));
+  hc.sqDir.set(0, 1, 0); hc.sqC.set(0, hc.s.floorY, 0); hc.sqV += 5;
+  for (const h of hc.holes) h.acc += 14;           // squeezes liquid out of any holes it already has
+  damage(26, hit.point, 1.3);
+  // a hard smash on a badly damaged squishy splits the skin open
+  if (!hc.dead && hc.integ < hc.max * 0.45 && !o.ruptured) {
+    o.ruptured = true;
+    const lp = localOf(m, hit.point);
+    const h = addHole(m, nearestVert(m, lp), 0.12, 60); h.el.scale.set(0.16, 0.07, 1);
+    spray(hit.point, worldNormal(hit), 55, 5, 2);
+    sSplat(10);
+  }
+}
+function axe(hit) {
+  const m = hit.object, o = objOf(m), nW = worldNormal(hit);
+  sChop(); hc.shake = Math.max(hc.shake, 0.3);
+  spray(hit.point, nW, 70, 6, 2);
+  chips(hit.point, nW, 8, 4);
+  if (!o) return;
+  if (o.stuck) o.stuck = null;
+  if (!o.isMain || hc.dead) return;
+  const lp = localOf(m, hit.point), nl = hit.face.normal.clone().negate();
+  const tW = UP.clone().addScaledVector(nW, -UP.dot(nW)); if (tW.lengthSq() < 1e-3) tW.set(1, 0, 0); tW.normalize();
+  const tl = dirLocal(m, tW);
+  for (let k = -3; k <= 3; k++) hc.queue.push(mkDent(lp.clone().addScaledVector(tl, k * 0.11), nl, 0.12, 0.2, 0.08));
+  for (const k of [-0.22, 0, 0.22]) addHole(m, nearestVert(m, lp.clone().addScaledVector(tl, k)), 0.07, k === 0 ? 55 : 15).el.scale.set(0.05, 0.14, 1);
+  hc.chops++;
+  damage(28, hit.point, 1.2);
+  if (!hc.dead && hc.chops >= 3) hcSplit(lp, new V3().crossVectors(tl, nl).normalize());
+}
+function pin(hit) {
+  const m = hit.object, o = objOf(m);
+  if (!o || !o.isMain || hc.dead) { spray(hit.point, worldNormal(hit), 6, 2, 0.5); return; }
+  const lp = localOf(m, hit.point);
+  addHole(m, nearestVert(m, lp), 0.025, hc.type === 'jelly' ? 0 : 18);
+  if (hc.type === 'jelly') { hcPop(hit.point, 1.1); return; }
+  slowDent(lp, hit.face.normal.clone().negate(), 0.18, 0.05, 2.4, 0.12);
+  spray(hit.point, worldNormal(hit), 10, 3, 0.6);
+  sHiss(); damage(8, hit.point);
+}
+function plantCracker(hit) {
+  const m = hit.object, o = objOf(m);
+  if (!o || !o.isMain || hc.dead) return;
+  const lp = localOf(m, hit.point), nl = hit.face.normal.clone().normalize();
+  const stick = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.34, 14), new THREE.MeshStandardMaterial({ color: '#d8322f', roughness: 0.55 })); tube.position.y = 0.17;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.05, 14), new THREE.MeshStandardMaterial({ color: '#e8b53a', roughness: 0.4, metalness: 0.4 })); band.position.y = 0.24;
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.12, 6), new THREE.MeshStandardMaterial({ color: '#555', roughness: 0.8 })); fuse.position.y = 0.4;
+  stick.add(tube, band, fuse); tube.castShadow = true;
+  stick.position.copy(lp).addScaledVector(nl, -0.05); stick.quaternion.setFromUnitVectors(UP, nl);
+  m.add(stick);
+  hc.crackers.push({ stick, t: 1.7, tip: new V3(0, 0.46, 0) });
+  sFuse();
+}
+function grab(hit) {
+  const o = objOf(hit.object); if (!o) return;
+  o.grabbed = true; o.stuck = null; hc.grab = o;
+  grabPlane.setFromNormalAndCoplanarPoint(hcCam.getWorldDirection(new V3()).negate(), hit.point);
+  grabOff.copy(hit.point).sub(o.group.position); hc.grabTarget = null;
+  hc.grabHist = [{ p: o.group.position.clone(), t: performance.now() }];
+  o.vel.set(0, 0, 0); canvas.classList.add('grabbing');
+  squishSound(hc.type);
+}
+function hcRelease() {
+  const o = hc.grab; if (!o) return;
+  hc.grab = null; hc.grabTarget = null; o.grabbed = false; canvas.classList.remove('grabbing');
+  const h = hc.grabHist, now = performance.now(); let a = h[0];
+  for (const x of h) if (now - x.t >= 60) a = x;
+  const b = h[h.length - 1], dt = Math.max(0.016, (b.t - a.t) / 1000);
+  o.vel.copy(b.p).sub(a.p).divideScalar(dt);
+  if (o.vel.length() > 45) o.vel.setLength(45);
+  o.ang.set(o.vel.z * 0.18 + rnd(-1, 1), rnd(-2, 2), -o.vel.x * 0.18 + rnd(-1, 1));
+}
+
+/* ---- burning ---- */
+let fireNode = null;
+function fireLoop(on) {
+  const a = state.sound ? audio() : null;
+  if (!a) { if (fireNode) fireNode.g.gain.value = 0; return; }
+  if (!fireNode) {
+    const src = a.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 600; bp.Q.value = 0.5;
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    const g = a.createGain(); g.gain.value = 0;
+    src.connect(bp).connect(lp).connect(g); out(g); src.start();
+    fireNode = { g };
+  }
+  fireNode.g.gain.setTargetAtTime(on ? 0.7 : 0, a.currentTime, 0.06);
+}
+const CHAR = { bao: [0.05, 0.035, 0.03], butter: [0.2, 0.1, 0.03], jelly: [0.16, 0.1, 0.08] };
+const smolder = { mesh: null, lp: new V3(), t: 0 };
+function burn(hit, dt) {
+  const m = hit.object, lp = localOf(m, hit.point), ca = m.geometry.attributes.color.array, r = m.userData.rest, ch = CHAR[hc.type], R2 = 0.25;
+  for (let i3 = 0; i3 < r.length; i3 += 3) {
+    const d2 = (r[i3] - lp.x) ** 2 + (r[i3 + 1] - lp.y) ** 2 + (r[i3 + 2] - lp.z) ** 2;
+    if (d2 > R2 * 3) continue;
+    const f = Math.min(1, Math.exp(-d2 / R2) * dt * 3.2);
+    ca[i3] += (ch[0] - ca[i3]) * f; ca[i3 + 1] += (ch[1] - ca[i3 + 1]) * f; ca[i3 + 2] += (ch[2] - ca[i3 + 2]) * f;
+  }
+  m.geometry.attributes.color.needsUpdate = true;
+  hc.meltAcc += dt;
+  if (hc.meltAcc > 0.1) { hc.meltAcc = 0; hc.queue.push(mkDent(lp, hit.face.normal.clone().negate(), 0.42, hc.type === 'butter' ? 0.05 : hc.type === 'jelly' ? 0.04 : 0.022, 0.05)); }
+  const nW = worldNormal(hit);
+  // smoke curling off the burn and the odd ember; the area keeps smouldering after the flame moves on
+  if (Math.random() < 0.7) spawnSmoke(_p.copy(hit.point).addScaledVector(nW, 0.08), _v2.copy(nW).multiplyScalar(0.4).add(randUnit(_v).multiplyScalar(0.25)).setY(rnd(0.5, 1.2)), rnd(1.6, 2.8), rnd(0.25, 0.45));
+  if (Math.random() < 0.25) spawnFire(hit.point, randUnit(_v).multiplyScalar(1.2).setY(rnd(1, 2.5)), rnd(0.4, 0.9), rnd(0.03, 0.06), 1);
+  smolder.mesh = m; smolder.lp.copy(lp); smolder.t = 4;
+  damage(dt * (hc.type === 'butter' ? 20 : 14), hit.point, 0.8);
+}
+function stepSmolder(dt) {
+  if (smolder.t <= 0 || !smolder.mesh || hc.dead) return;
+  smolder.t -= dt;
+  if (Math.random() < dt * 9 * Math.min(1, smolder.t / 2)) {
+    const p = smolder.mesh.localToWorld(smolder.lp.clone());
+    spawnSmoke(p, randUnit(_v).multiplyScalar(0.15).setY(rnd(0.3, 0.7)), rnd(1.5, 2.5), rnd(0.15, 0.3));
+    if (Math.random() < 0.15) spawnFire(p, randUnit(_v).multiplyScalar(0.5).setY(rnd(0.5, 1.2)), rnd(0.3, 0.6), 0.04, 1);
+  }
+}
+function stepFire(dt) {
+  fireLoop(hc.fire);
+  if (!hc.fire) return;
+  const start = nozzle(); aim();
+  const T = hcTargets(), hit = T.length ? ray.intersectObjects(T, false)[0] : null;
+  const tgt = hit ? hit.point.clone() : ray.ray.at(10, new V3());
+  const dir = tgt.sub(start).normalize();
+  hc.fireAcc += dt * 650; const n = Math.floor(hc.fireAcc); hc.fireAcc -= n;
+  for (let k = 0; k < n; k++) {
+    const d = dir.clone().add(randUnit(_v).multiplyScalar(0.07)).normalize();
+    spawnFire(_p.copy(start).addScaledVector(d, rnd(0, 0.4)), d.multiplyScalar(rnd(17, 22)), rnd(0.45, 0.75), rnd(0.15, 0.3), 0);
+  }
+  if (hit) {
+    const nW = worldNormal(hit);
+    for (let k = 0; k < 6; k++) spawnFire(hit.point, _v2.copy(nW).multiplyScalar(1.5).add(randUnit(_v).multiplyScalar(2.5)).setY(rnd(1, 3)), rnd(0.4, 0.8), rnd(0.25, 0.45), 0);
+    const o = objOf(hit.object);
+    if (o && o.isMain && !hc.dead) burn(hit, dt);
+  }
+}
+
+/* ---- rigid body ---- */
+function rigidStep(o, dt, isMain) {
+  const g = o.group;
+  if (!o.grabbed) {
+    if (o.stuck) {
+      // sticky jelly: slowly slides down the wall, then lets go
+      o.stuck.t -= dt; g.position.y -= 0.18 * dt * (1 + (3 - Math.max(0, o.stuck.t)) * 0.3);
+      if (o.stuck.t <= 0) { o.vel.copy(o.stuck.n).multiplyScalar(0.6); o.stuck = null; sPlip(); }
+    } else {
+      o.vel.y -= 20 * dt;
+      g.position.addScaledVector(o.vel, dt);
+      const w = o.ang.length();
+      if (w > 1e-4) { _q.setFromAxisAngle(_v.copy(o.ang).multiplyScalar(1 / w), w * dt); g.quaternion.premultiply(_q).normalize(); }
+    }
+  }
+  g.updateMatrixWorld(true);
+  const e = o.mesh.matrixWorld.elements, arr = o.mesh.geometry.attributes.position.array, idx = o.idx;
+  let maxY = -Infinity; const cTop = new V3();
+  let minY = Infinity, maxX = -Infinity, minX = Infinity, minZ = Infinity, maxZ = -Infinity;
+  const cY = new V3(), cX1 = new V3(), cX0 = new V3(), cZ0 = new V3(), cZ1 = new V3();
+  for (let k = 0; k < idx.length; k++) {
+    const j = idx[k] * 3, x = arr[j], y = arr[j + 1], z = arr[j + 2];
+    const wx = e[0] * x + e[4] * y + e[8] * z + e[12], wy = e[1] * x + e[5] * y + e[9] * z + e[13], wz = e[2] * x + e[6] * y + e[10] * z + e[14];
+    if (wy < minY) { minY = wy; cY.set(wx, wy, wz); }
+    if (wy > maxY) { maxY = wy; cTop.set(wx, wy, wz); }
+    if (wx > maxX) { maxX = wx; cX1.set(wx, wy, wz); }
+    if (wx < minX) { minX = wx; cX0.set(wx, wy, wz); }
+    if (wz < minZ) { minZ = wz; cZ0.set(wx, wy, wz); }
+    if (wz > maxZ) { maxZ = wz; cZ1.set(wx, wy, wz); }
+  }
+  const contacts = [];
+  if (minY < 0) contacts.push({ pen: -minY, n: UP, p: cY.setY(0), wall: false, floor: true });
+  if (maxX > HC.W) contacts.push({ pen: maxX - HC.W, n: new V3(-1, 0, 0), p: cX1.setX(HC.W), wall: true });
+  if (minX < -HC.W) contacts.push({ pen: -HC.W - minX, n: new V3(1, 0, 0), p: cX0.setX(-HC.W), wall: true });
+  if (minZ < -HC.D) contacts.push({ pen: -HC.D - minZ, n: new V3(0, 0, 1), p: cZ0.setZ(-HC.D), wall: true });
+  if (maxY > HC.C) contacts.push({ pen: maxY - HC.C, n: new V3(0, -1, 0), p: cTop.setY(HC.C), wall: false, invisible: true });
+  if (maxZ > HC.F) contacts.push({ pen: maxZ - HC.F, n: new V3(0, 0, -1), p: cZ1.setZ(HC.F), wall: false, invisible: true });
+  for (const c of contacts) {
+    g.position.addScaledVector(c.n, c.pen);
+    const vn = o.vel.dot(c.n);
+    if (vn < 0 && !o.grabbed) {
+      const sp = -vn;
+      // soft toys soak up the hit: low bounce, more grip, less spin
+      const soft = isMain && hc.type !== 'jelly';
+      const rest = soft ? 1.12 : (sp > 2 ? 1.3 : 1);
+      o.vel.addScaledVector(c.n, sp * rest);
+      o.vel.multiplyScalar(soft ? 0.72 : 0.86); o.ang.multiplyScalar(soft ? 0.5 : 0.7);
+      o.ang.x += rnd(-1, 1) * sp * (soft ? 0.08 : 0.2); o.ang.z += rnd(-1, 1) * sp * (soft ? 0.08 : 0.2);
+      if (sp > 3.5) {
+        if (isMain && hc.grace > 0) { hc.sqDir.set(0, 1, 0); hc.sqC.set(0, hc.s.floorY, 0); hc.sqV += sp * 0.25; sThud(0.35); }
+        else impact(o, c, sp, isMain);
+      }
+    }
+  }
+  o.onFloor = minY < 0.03;
+  if (o.onFloor && !o.grabbed && !o.stuck) {
+    const f = Math.exp(-dt * 5); o.vel.x *= f; o.vel.z *= f; o.ang.multiplyScalar(Math.exp(-dt * 4));
+    if (isMain && o.vel.lengthSq() < 0.3) {
+      const eu = new THREE.Euler().setFromQuaternion(g.quaternion, 'YXZ');
+      _q2.setFromEuler(new THREE.Euler(0, eu.y, 0, 'YXZ')); g.quaternion.slerp(_q2, 1 - Math.exp(-dt * 3));
+    }
+  }
+  if (contacts.length) g.updateMatrixWorld(true);
+}
+function impact(o, c, sp, isMain) {
+  // Liquid only comes out where the skin is open: through existing holes on the squishy,
+  // or from the cut face of a split half. An intact squishy just thuds and squishes.
+  if (isMain) {
+    const open = hc.holes.filter((h) => h.leak);
+    if (open.length && hc.fill > 0.02) for (const h of open) h.acc += Math.min(30, sp * 2.5); // the slam squeezes liquid out of its holes
+    sThud(Math.min(1, sp / 14)); squishSound(hc.type);
+  } else {
+    const fl = hcFluid(), foam = isFoam();
+    for (let i = 0; i < Math.min(14, Math.floor(sp * 1.5)); i++) {
+      randUnit(_v); _v.addScaledVector(c.n, -_v.dot(c.n)).normalize();
+      spawnDrop(_p.copy(c.p).addScaledVector(c.n, 0.06), _v2.copy(_v).multiplyScalar(sp * rnd(0.05, 0.2)).addScaledVector(c.n, rnd(0.3, 1)), jitter(fl), dropSize(), foam);
+    }
+    sSplat(sp * 0.6);
+  }
+  hc.shake = Math.max(hc.shake, Math.min(0.5, sp * 0.03));
+  // sticky jelly: thrown hard at a wall, it sticks
+  if (isMain && hc.type === 'jelly' && c.wall && sp > 3.5 && !hc.dead) {
+    const F = flattenOn(o, c, sp);
+    o.stuck = { n: c.n.clone(), t: 2 + F * 9 }; o.vel.set(0, 0, 0); o.ang.set(0, 0, 0);
+    squashToward(c, sp);
+    return;
+  }
+  if (!isMain || hc.dead) return;
+  const m = o.mesh;
+  squashToward(c, sp);
+  if (hc.type === 'jelly') {
+    hc.queue.push(mkDent(localOf(m, c.p), dirLocal(m, c.n), 0.45 + Math.min(0.45, sp * 0.03), Math.min(0.42, 0.05 + (sp - 3.5) * 0.035) * (o.stuck ? 1.4 : 1), 0.3));
+    return;
+  }
+  // foam squishies: a wide soft dent that slowly rises back out (slow-rise foam), not permanent damage
+  const R = 0.55 + Math.min(0.45, sp * 0.03);
+  hc.s.dents.push({ c: localOf(m, c.p), n: dirLocal(m, c.n).normalize(), inv: 1 / (R * R), R, depth: Math.min(0.42, 0.08 + sp * 0.022), vel: 0, held: false, kind: 'impact' });
+  if (hc.s.dents.length > 6) hc.s.dents.shift();
+}
+// squash-and-wobble along the side that hit (wall or floor), pivoting on the contact point
+function squashToward(c, sp) {
+  const cont = hc.s.content; cont.updateMatrixWorld(true);
+  const inv = _m4.copy(cont.matrixWorld).invert();
+  hc.sqDir.copy(c.n).transformDirection(inv).normalize();
+  hc.sqC.copy(c.p).applyMatrix4(inv);
+  hc.sqV += Math.min(4.5, sp * 0.32) * (hc.type === 'jelly' ? 0.7 : 1);
+}
+
+function flattenOn(o, c, sp) {
+  // Each wall splat squashes the jelly's CURRENT shape (dents stay), but it can never get
+  // thinner than about half its width, and it always keeps the same amount of gel.
+  const m = o.mesh; hcFlush(); m.updateMatrixWorld();
+  const inv = _m4.copy(m.matrixWorld).invert();
+  const nl = c.n.clone().transformDirection(inv);
+  const rest = m.userData.rest, orig = m.userData.orig, t = new V3();
+  const wt = new Float32Array(rest.length / 3);
+  let dmin = Infinity, dmax = -Infinity, pw = new V3();
+  for (let i3 = 0; i3 < rest.length; i3 += 3) { const d = rest[i3] * nl.x + rest[i3 + 1] * nl.y + rest[i3 + 2] * nl.z; if (d < dmin) dmin = d; if (d > dmax) dmax = d; }
+  pw.copy(nl).multiplyScalar(dmin);                       // plane touching the jelly where it hit
+  const F = Math.max(0, Math.min(0.58, 0.12 + sp * 0.02, (dmax - dmin) - 1.1)), band = F + 0.5;
+  for (let i3 = 0; i3 < rest.length; i3 += 3) {
+    const px = rest[i3] - pw.x, py = rest[i3 + 1] - pw.y, pz = rest[i3 + 2] - pw.z;
+    const d = px * nl.x + py * nl.y + pz * nl.z;
+    if (d > band + 0.35) continue;
+    wt[i3 / 3] = smooth(band + 0.35, F * 0.5, d);
+    if (d > band) continue;
+    // soft squash: flat against the wall, curving smoothly into the round side (no sharp rim)
+    const SR = 0.16, sm = Math.max(F, d) + SR * Math.log1p(Math.exp(-Math.abs(F - d) / SR));
+    const push = F > 0 ? sm - d : 0;
+    t.set(px - nl.x * d, py - nl.y * d, pz - nl.z * d);
+    const tl = t.length(); if (tl > 1e-5) t.multiplyScalar(1 / tl);
+    const spread = F * 0.45 * smooth(band, 0, d) + push * 0.35;
+    rest[i3] += nl.x * push + t.x * spread; rest[i3 + 1] += nl.y * push + t.y * spread; rest[i3 + 2] += nl.z * push + t.z * spread;
+  }
+  smoothRest(m, -99, 1);
+  // gel rounds off the rim of the squashed patch instead of keeping a sharp edge
+  const { keys, start, list } = m.userData.adj, tmp = new Float32Array(rest.length);
+  for (let pass = 0; pass < 8; pass++) {
+    tmp.set(rest);
+    for (let k = 0; k < keys.length; k++) {
+      const v = keys[k], w = wt[v]; if (!w) continue;
+      let ax = 0, ay = 0, az = 0; const cnt = start[k + 1] - start[k];
+      for (let j = start[k]; j < start[k + 1]; j++) { const u = list[j] * 3; ax += rest[u]; ay += rest[u + 1]; az += rest[u + 2]; }
+      const v3 = v * 3, lam = 0.5 * w;
+      tmp[v3] = rest[v3] + lam * (ax / cnt - rest[v3]); tmp[v3 + 1] = rest[v3 + 1] + lam * (ay / cnt - rest[v3 + 1]); tmp[v3 + 2] = rest[v3 + 2] + lam * (az / cnt - rest[v3 + 2]);
+    }
+    rest.set(tmp);
+  }
+  // put back any gel the squash took away, growing out from the contact patch
+  const q = pw.clone().addScaledVector(nl, F > 0 ? F + 0.16 * Math.LN2 : 0);
+  const vol = meshVolume(rest, m.geometry.index.array), kv = vol > 0 ? Math.min(1.2, Math.max(1, Math.cbrt(m.userData.vol0 / vol))) : 1;
+  if (kv > 1) for (let i3 = 0; i3 < rest.length; i3 += 3) {
+    rest[i3] = q.x + (rest[i3] - q.x) * kv; rest[i3 + 1] = q.y + (rest[i3 + 1] - q.y) * kv; rest[i3 + 2] = q.z + (rest[i3 + 2] - q.z) * kv;
+  }
+  refreshRestNormals(m);
+  for (const h of hc.holes) placeHole(h);
+  hc.relax = true;
+  // slide the body so the flat patch sits right on the wall
+  m.updateMatrixWorld();
+  const qW = q.clone().applyMatrix4(m.matrixWorld);
+  o.group.position.addScaledVector(c.n, -(qW.clone().sub(c.p).dot(c.n)));
+  return F;
+}
+
+/* ---- per-frame ---- */
+function stepParticles(dt) {
+  const W = HC.W, Dd = HC.D;
+  for (let i = 0; i < DMAX; i++) {
+    if (DR.life[i] <= 0) continue;
+    const i3 = i * 3, s = DR.size[i], foam = DR.kind[i] === 1;
+    DR.life[i] -= dt;
+    if (DR.life[i] <= 0) { _m4.makeScale(0, 0, 0); dropMesh.setMatrixAt(i, _m4); continue; }
+    let sp = 0;
+    if (!DR.stuck[i]) {
+      DR.v[i3 + 1] -= (foam ? 7 : 14) * dt;
+      const dr = Math.exp(-dt * (foam ? 2.2 : 0.35));
+      DR.v[i3] *= dr; DR.v[i3 + 1] *= dr; DR.v[i3 + 2] *= dr;
+      DR.p[i3] += DR.v[i3] * dt; DR.p[i3 + 1] += DR.v[i3 + 1] * dt; DR.p[i3 + 2] += DR.v[i3 + 2] * dt;
+      sp = Math.hypot(DR.v[i3], DR.v[i3 + 1], DR.v[i3 + 2]);
+      if (DR.p[i3 + 1] > HC.C) { DR.p[i3 + 1] = HC.C; DR.v[i3 + 1] = -Math.abs(DR.v[i3 + 1]) * 0.3; }
+      let n = null;
+      if (DR.p[i3 + 1] < s * 0.5) { n = UP; DR.p[i3 + 1] = 0; }
+      else if (DR.p[i3] > W) { n = _v.set(-1, 0, 0); DR.p[i3] = W; }
+      else if (DR.p[i3] < -W) { n = _v.set(1, 0, 0); DR.p[i3] = -W; }
+      else if (DR.p[i3 + 2] < -Dd) { n = _v.set(0, 0, 1); DR.p[i3 + 2] = -Dd; }
+      if (n) {
+        if (foam) { _c.setRGB(DR.col[i3], DR.col[i3 + 1], DR.col[i3 + 2]); spawnFoamBlob(_p.set(DR.p[i3], DR.p[i3 + 1], DR.p[i3 + 2]), n.clone(), s, _c); DR.life[i] = 0; _m4.makeScale(0, 0, 0); dropMesh.setMatrixAt(i, _m4); continue; }
+        else {
+          _c.setRGB(DR.col[i3], DR.col[i3 + 1], DR.col[i3 + 2]);
+          spawnSplat(_p.set(DR.p[i3], DR.p[i3 + 1], DR.p[i3 + 2]), n, s * rnd(1.8, 2.6) + Math.min(0.12, sp * 0.01), _c);
+          DR.life[i] = 0; _m4.makeScale(0, 0, 0); dropMesh.setMatrixAt(i, _m4); continue;
+        }
+      }
+    }
+    let sc = s; if (DR.life[i] < 0.8) sc *= DR.life[i] / 0.8;
+    _p.set(DR.p[i3], DR.p[i3 + 1], DR.p[i3 + 2]);
+    if (sp > 0.5) { _q.setFromUnitVectors(UP, _v2.set(DR.v[i3], DR.v[i3 + 1], DR.v[i3 + 2]).multiplyScalar(1 / sp)); _s.set(sc, sc * (1 + Math.min(2.2, sp * 0.06)), sc); }
+    else { _q.identity(); _s.set(sc, DR.stuck[i] ? sc * 0.6 : sc, sc); }
+    _m4.compose(_p, _q, _s); dropMesh.setMatrixAt(i, _m4);
+  }
+  dropMesh.instanceMatrix.needsUpdate = true;
+  for (let i = 0; i < FMAX; i++) {
+    if (FR.life[i] <= 0) continue;
+    const i3 = i * 3, s = FR.size[i]; FR.life[i] -= dt;
+    if (FR.life[i] <= 0) { _m4.makeScale(0, 0, 0); fragMesh.setMatrixAt(i, _m4); continue; }
+    FR.v[i3 + 1] -= 16 * dt;
+    FR.p[i3] += FR.v[i3] * dt; FR.p[i3 + 1] += FR.v[i3 + 1] * dt; FR.p[i3 + 2] += FR.v[i3 + 2] * dt;
+    const floorY = s * 0.3;
+    if (FR.p[i3 + 1] < floorY) { FR.p[i3 + 1] = floorY; if (FR.v[i3 + 1] < 0) FR.v[i3 + 1] *= -0.3; FR.v[i3] *= 0.7; FR.v[i3 + 2] *= 0.7; FR.w[i3] *= 0.6; FR.w[i3 + 1] *= 0.6; FR.w[i3 + 2] *= 0.6; }
+    if (FR.p[i3 + 1] > HC.C) { FR.p[i3 + 1] = HC.C; FR.v[i3 + 1] = -Math.abs(FR.v[i3 + 1]) * 0.3; }
+    if (Math.abs(FR.p[i3]) > HC.W) { FR.p[i3] = Math.sign(FR.p[i3]) * HC.W; FR.v[i3] *= -0.4; }
+    if (FR.p[i3 + 2] < -HC.D) { FR.p[i3 + 2] = -HC.D; FR.v[i3 + 2] *= -0.4; }
+    const w = Math.hypot(FR.w[i3], FR.w[i3 + 1], FR.w[i3 + 2]);
+    if (w > 0.01) { _q.setFromAxisAngle(_v.set(FR.w[i3] / w, FR.w[i3 + 1] / w, FR.w[i3 + 2] / w), w * dt); FR.q[i].premultiply(_q); }
+    const sc = FR.life[i] < 1 ? s * FR.life[i] : s;
+    _m4.compose(_p.set(FR.p[i3], FR.p[i3 + 1], FR.p[i3 + 2]), FR.q[i], _s.set(sc, sc * 0.35, sc * 0.8)); fragMesh.setMatrixAt(i, _m4);
+  }
+  fragMesh.instanceMatrix.needsUpdate = true;
+  const pa = pGeo.attributes.position.array, sa = pGeo.attributes.aSize.array, ca = pGeo.attributes.aColor.array, aa = pGeo.attributes.aAlpha.array;
+  for (let i = 0; i < PMAX; i++) {
+    if (PR.life[i] <= 0) { aa[i] = 0; sa[i] = 0; continue; }
+    const i3 = i * 3; PR.life[i] -= dt; const t = Math.max(0, PR.life[i] / PR.max[i]), spark = PR.kind[i] === 1;
+    const dr = Math.exp(-dt * (spark ? 1.2 : 0.9));
+    PR.v[i3] *= dr; PR.v[i3 + 1] = PR.v[i3 + 1] * dr + (spark ? -9 : 3.5) * dt; PR.v[i3 + 2] *= dr;
+    pa[i3] += PR.v[i3] * dt; pa[i3 + 1] += PR.v[i3 + 1] * dt; pa[i3 + 2] += PR.v[i3 + 2] * dt;
+    if (spark) { sa[i] = PR.size[i]; ca[i3] = 1; ca[i3 + 1] = 0.8; ca[i3 + 2] = 0.4; aa[i] = t; }
+    else {
+      sa[i] = PR.size[i] * (1 + (1 - t) * 2.4);
+      if (t > 0.7) { ca[i3] = 1; ca[i3 + 1] = 0.92; ca[i3 + 2] = 0.6; } else if (t > 0.35) { ca[i3] = 1; ca[i3 + 1] = 0.5; ca[i3 + 2] = 0.12; } else { ca[i3] = 0.6; ca[i3 + 1] = 0.12; ca[i3 + 2] = 0.05; }
+      aa[i] = t * 0.6;
+    }
+  }
+  for (const k of ['position', 'aSize', 'aColor', 'aAlpha']) pGeo.attributes[k].needsUpdate = true;
+}
+function stepLeaks(dt) {
+  if (hc.dead || hc.fill <= 0.02) return;
+  const fl = hcFluid(), foam = isFoam();
+  for (const h of hc.holes) {
+    if (!h.leak) continue;
+    h.acc += h.leak * dt * Math.max(0.2, hc.fill);
+    const n = Math.floor(h.acc); if (!n) continue; h.acc -= n;
+    h.el.getWorldPosition(_p); h.el.getWorldQuaternion(_q); _v.set(0, 0, 1).applyQuaternion(_q);
+    for (let k = 0; k < n; k++) { _v2.copy(_v).multiplyScalar(rnd(0.3, 0.6 + hc.fill * 1.8)).add(randUnit(_s).multiplyScalar(0.25)); spawnDrop(_p, _v2, jitter(fl), foam ? rnd(0.035, 0.08) : rnd(0.018, 0.04), foam); }
+    hc.fill -= n * 0.0008 * (hc.type === 'jelly' ? 1.4 : 1);
+  }
+  hc.fill = Math.max(0, hc.fill);
+}
+let hcLastUI = '';
+// squishies bump into each other softly instead of passing through
+function bumpSquishies() {
+  saveCtx(); hcActive = null;           // work directly on each squishy's saved state
+  const live = hcList.filter((st) => st.s && !st.dead);
+  const RAD = { bao: 1.0, butter: 1.15, jelly: 0.95 };
+  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+    const A = live[i], B = live[j], ga = A.s.holder.position, gb = B.s.holder.position;
+    const ra = RAD[A.type] * A.sizeCur, rb = RAD[B.type] * B.sizeCur;
+    const dx = gb.x - ga.x, dy = (gb.y + rb * 0.5) - (ga.y + ra * 0.5), dz = gb.z - ga.z, d = Math.hypot(dx, dy, dz) || 1e-4;
+    const overlap = ra + rb - d;
+    if (overlap <= 0) continue;
+    const nx = dx / d, ny = dy / d, nz = dz / d;
+    const aFixed = hc.grab === A.body, bFixed = hc.grab === B.body;
+    const wa = aFixed ? 0 : bFixed ? 1 : 0.5, wb = bFixed ? 0 : aFixed ? 1 : 0.5;
+    ga.x -= nx * overlap * wa; ga.z -= nz * overlap * wa; ga.y -= Math.min(0, ny * overlap * wa);
+    gb.x += nx * overlap * wb; gb.z += nz * overlap * wb; gb.y += Math.max(0, ny * overlap * wb);
+    const va = A.body.vel, vb = B.body.vel, rel = (vb.x - va.x) * nx + (vb.y - va.y) * ny + (vb.z - va.z) * nz;
+    if (rel < 0) {
+      const jmp = -rel * 0.6;                     // soft: they squish into each other and push apart gently
+      if (!aFixed) { va.x -= nx * jmp * wa * 2; va.y -= ny * jmp * wa * 2; va.z -= nz * jmp * wa * 2; }
+      if (!bFixed) { vb.x += nx * jmp * wb * 2; vb.y += ny * jmp * wb * 2; vb.z += nz * jmp * wb * 2; }
+      if (-rel > 2.5) {
+        for (const [st, sgn] of [[A, 1], [B, -1]]) { st.sqDir = new V3(nx * sgn, ny * sgn, nz * sgn).transformDirection(_m4.copy(st.s.content.matrixWorld).invert()).normalize(); st.sqC = new V3(0, st.s.floorY, 0); st.sqV += Math.min(3, -rel * 0.25); }
+        if (-rel > 4) squishSound(A.type);
+      }
+    }
+  }
+}
+function stepOne(dt) {
+  const me = hcActive;
+  hc.grace = Math.max(0, hc.grace - dt);
+  hcFlush();
+  stepAnims(dt);
+  for (const c of hc.crackers.slice()) {
+    c.t -= dt; const tip = c.stick.localToWorld(c.tip.clone());
+    for (let k = 0; k < 4; k++) spawnFire(tip, randUnit(_v).multiplyScalar(rnd(1, 3)).setY(rnd(0.5, 2)), rnd(0.15, 0.35), rnd(0.03, 0.06), 1);
+    if (c.t <= 0) { const p = c.stick.localToWorld(new V3(0, 0.15, 0)); c.stick.removeFromParent(); hc.crackers.splice(hc.crackers.indexOf(c), 1); explode(p); loadCtx(me); }
+  }
+  if (hc.s && !hc.dead) rigidStep(hc.body, dt, true);
+  stepLeaks(dt);
+  hc.relaxAcc = (hc.relaxAcc || 0) + dt;
+  if (hc.s && !hc.dead && hc.type === 'jelly' && hc.relax && hc.relaxAcc > 0.25) {
+    const step = hc.relaxAcc; hc.relaxAcc = 0;
+    const m = hc.s.def[0], r = m.userData.rest, o = m.userData.orig;
+    const k = 1 - Math.exp(-step * (hc.body.stuck ? 0.006 : 0.035));   // takes about a minute to round out
+    let mx = 0;
+    for (let i = 0; i < r.length; i++) { const d = o[i] - r[i]; r[i] += d * k; if (d > mx) mx = d; else if (-d > mx) mx = -d; }
+    refreshRestNormals(m);
+    for (const h of hc.holes) placeHole(h);
+    if (mx < 0.004) hc.relax = false;
+  }
+  if (hc.s && !hc.dead) {
+    const softT = hc.type !== 'jelly';
+    const a = -(softT ? 70 : 120) * hc.sq - (softT ? 4.2 : 7) * hc.sqV; hc.sqV += a * dt; hc.sq = Math.max(-0.22, Math.min(0.42, hc.sq + hc.sqV * dt));
+    for (const d of hc.s.dents) d.depth *= Math.exp(-dt / 1.8);          // slow rise back out
+    hc.s.dents = hc.s.dents.filter((d) => d.depth > 0.003);
+    const sag = 1 - hc.fill, st = 0;
+    const ys = 1 - 0.42 * sag, xz = 1 + 0.18 * sag;
+    // squash along the hit direction: flatter on that axis, wider around it, pivoting on the contact point
+    {
+      const cont = hc.s.content, n = hc.sqDir, cp = hc.sqC, sn = 1 - hc.sq, so = 1 + hc.sq * 0.45, k = sn - so;
+      const A = [so + k * n.x * n.x, k * n.x * n.y, k * n.x * n.z, k * n.y * n.x, so + k * n.y * n.y, k * n.y * n.z, k * n.z * n.x, k * n.z * n.y, so + k * n.z * n.z];
+      const ax = A[0] * cp.x + A[1] * cp.y + A[2] * cp.z, ay = A[3] * cp.x + A[4] * cp.y + A[5] * cp.z, az = A[6] * cp.x + A[7] * cp.y + A[8] * cp.z;
+      const px = cont.position.x + cp.x - ax, py = cont.position.y + cp.y - ay, pz = cont.position.z + cp.z - az;
+      cont.matrixAutoUpdate = false;
+      cont.matrix.set(A[0], A[1], A[2], px, A[3], A[4], A[5], py, A[6], A[7], A[8], pz, 0, 0, 0, 1);
+      cont.matrixWorldNeedsUpdate = true;
+    }
+    hc.sizeCur += (hc.size - hc.sizeCur) * (1 - Math.exp(-dt * 6));
+    const S = hc.sizeCur;
+    hc.s.holder.scale.set(xz * S, ys * S, xz * (1 - st) * S);
+    deform(hc.s);
+  }
+}
+function hcFrame(dt, now) {
+  saveCtx();
+  stepFire(dt);
+  for (const r of hc.rockets.slice()) {
+    r.life -= dt;
+    const from = r.mesh.position.clone(), step = r.vel.length() * dt, dir = r.vel.clone().normalize();
+    ray.ray.origin.copy(from); ray.ray.direction.copy(dir); ray.far = step;
+    const T = hcTargets(), h = T.length ? ray.intersectObjects(T, false)[0] : null; ray.far = Infinity;
+    const w = roomHit(from, dir);
+    for (let k = 0; k < 6; k++) spawnFire(from, randUnit(_v).multiplyScalar(0.8).addScaledVector(dir, -3), rnd(0.25, 0.5), rnd(0.12, 0.25), 0);
+    let at = null;
+    if (h) at = h.point; else if (w && w.t <= step) at = w.p; else if (r.life <= 0) at = from;
+    if (at) { hcScene.remove(r.mesh); hc.rockets.splice(hc.rockets.indexOf(r), 1); explode(at); }
+    else r.mesh.position.addScaledVector(r.vel, dt);
+  }
+  if (hc.grab && hc.grabTarget) {
+    const g = hc.grab.group.position;
+    g.lerp(hc.grabTarget, 1 - Math.exp(-dt * 18));
+    g.x = Math.max(-HC.W + 0.5, Math.min(HC.W - 0.5, g.x)); g.z = Math.max(-HC.D + 0.5, Math.min(HC.F - 0.5, g.z)); g.y = Math.min(HC.C - 1.6, g.y);
+    hc.grabHist.push({ p: g.clone(), t: now }); while (hc.grabHist.length > 2 && now - hc.grabHist[0].t > 200) hc.grabHist.shift();
+    hc.grab.ang.multiplyScalar(0.9);
+  }
+  for (const st of hcList) { loadCtx(st); stepOne(dt); }
+  saveCtx();
+  bumpSquishies();
+  for (const h of hc.halves) { if (h.owner) loadCtx(h.owner); rigidStep(h, dt, false); h.worldPlane.copy(h.localPlane).applyMatrix4(h.mesh.matrixWorld); }
+  // the status bar shows whichever squishy you touched last
+  if (!hcList.includes(hcFocus)) hcFocus = hcList.find((x) => !x.dead) || hcList[hcList.length - 1] || null;
+  if (hcFocus) loadCtx(hcFocus);
+  stepParticles(dt);
+  stepSmoke(dt);
+  stepSmolder(dt);
+  hcBoomLight.intensity *= Math.exp(-dt * 7);
+  if (!reduced) {
+    if (hc.flick > 0) { hc.flick -= dt; hcKey.intensity = Math.random() < 0.5 ? 0.25 : 1.35; }
+    else { hcKey.intensity = 1.35; if (Math.random() < dt * 0.25) hc.flick = rnd(0.15, 0.5); }
+  }
+  hc.shake *= Math.exp(-dt * 6); hc.flash *= Math.exp(-dt * 9);
+  hcCam.position.copy(hcCamBase).add(randUnit(_v).multiplyScalar(hc.shake * 0.25));
+  hcCam.lookAt(hcLook);
+  const fx = $('#hc-flash'); fx.style.opacity = hc.flash.toFixed(3); fx.dataset.kind = hc.flashCol || 'gun';
+  const pct = Math.max(0, Math.round(hc.integ / hc.max * 100));
+  const txt = hc.dead ? (hc.split ? 'Split in half' : 'Popped') : `${pct}%${hc.holes.some((h) => h.leak) && hc.fill > 0.02 ? ' · leaking' : ''}`;
+  if (txt !== hcLastUI) {
+    hcLastUI = txt; $('#hc-pct').textContent = txt;
+    const f = $('#hc-fill'); f.style.width = (hc.dead ? 0 : pct) + '%';
+    f.dataset.level = pct > 60 ? 'ok' : pct > 30 ? 'warn' : 'bad';
+    $('#hc-new').classList.toggle('pulse', hcList.every((x) => x.dead));
+    hcRenderUI();
+  }
+  renderer.render(hcScene, hcCam);
+}
+
+/* ---- sounds ---- */
+function sfx(fn) { const a = audio(); if (!a) return; const t = a.currentTime + 0.005; const bus = a.createGain(); out(bus); fn(a, t, bus); }
+function tone(a, b, t, f0, f1, len, gain, type = 'sine') { const o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g).connect(b); o.start(t); o.stop(t + len + 0.02); }
+const sGun = (big) => sfx((a, t, b) => { noiseBurst(a, b, t, big ? 0.55 : 0.3, 'lowpass', big ? 5200 : 7000, big ? 260 : 500, 0.7, big ? 1.3 : 0.95, 0.002); noiseBurst(a, b, t, 0.05, 'highpass', 3500, 2500, 0.7, 0.7, 0.001); tone(a, b, t, big ? 95 : 130, 35, 0.3, big ? 0.9 : 0.6); });
+const sThud = (k = 1) => sfx((a, t, b) => { tone(a, b, t, 85, 32, 0.35, 0.9 * k); noiseBurst(a, b, t, 0.25, 'lowpass', 700, 150, 0.8, 0.7 * k, 0.003); grains(a, b, t + 0.02, SOUND[hc.type], 18, 0.25); });
+const sChop = () => sfx((a, t, b) => { noiseBurst(a, b, t, 0.14, 'bandpass', 300, 1800, 1, 0.35, 0.06); noiseBurst(a, b, t + 0.12, 0.09, 'bandpass', 1900, 800, 2, 0.9, 0.001); tone(a, b, t + 0.12, 240, 110, 0.12, 0.5, 'triangle'); noiseBurst(a, b, t + 0.14, 0.3, 'bandpass', 800, 260, 2.5, 0.6, 0.02); });
+const sPop = () => sfx((a, t, b) => { noiseBurst(a, b, t, 0.7, 'lowpass', 2600, 140, 0.8, 1.1, 0.002); tone(a, b, t, 120, 40, 0.5, 0.9); for (let i = 0; i < 14; i++) pop(a, b, t + Math.random() * 0.5, 300 + Math.random() * 900, 0.08 + Math.random() * 0.1); grains(a, b, t + 0.05, SOUND[hc.type], 40, 0.9); });
+const sSplat = (sp) => sfx((a, t, b) => { const k = Math.min(1, sp / 14); noiseBurst(a, b, t, 0.28, 'bandpass', 950, 240, 1.6, 0.4 + 0.6 * k, 0.004); tone(a, b, t, 110, 45, 0.2, 0.5 * k); for (let i = 0; i < 4; i++) pop(a, b, t + Math.random() * 0.2, 300 + Math.random() * 600, 0.06); });
+const sHiss = () => sfx((a, t, b) => { noiseBurst(a, b, t, 1.6, 'highpass', 3800, 3000, 0.7, 0.2, 0.05); });
+const sFuse = () => sfx((a, t, b) => { noiseBurst(a, b, t, 1.7, 'highpass', 5200, 4200, 0.8, 0.14, 0.03); });
+const sLaunch = () => sfx((a, t, b) => { noiseBurst(a, b, t, 0.9, 'bandpass', 500, 2400, 0.8, 0.9, 0.01); tone(a, b, t, 70, 40, 0.4, 0.6); });
+const sBoom = () => sfx((a, t, b) => { noiseBurst(a, b, t, 1.6, 'lowpass', 3200, 90, 0.7, 1.5, 0.002); tone(a, b, t, 60, 22, 1.2, 1.1); noiseBurst(a, b, t + 0.05, 1.2, 'bandpass', 1500, 300, 0.6, 0.4, 0.05); });
+const sPlip = () => sfx((a, t, b) => { pop(a, b, t, 380, 0.12); noiseBurst(a, b, t, 0.2, 'bandpass', 700, 300, 3, 0.25, 0.01); });
+
+/* ---- UI ---- */
+const hcEl = $('#hc');
+function hcRenderUI() {
+  document.querySelectorAll('.hc-tool').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === hc.tool)));
+  document.querySelectorAll('.hc-types button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.type === hc.addType)));
+  const nb = $('#hc-new');
+  nb.textContent = `Add ${hc.addType === 'butter' ? 'butter' : hc.addType === 'jelly' ? 'jelly' : 'bao'}`;
+  $('#hc-hint').textContent = HINTS[hc.tool];
+  $('#hc-name').textContent = hcPreset().name;
+  $('#hc-sound').textContent = state.sound ? 'Sound on' : 'Sound off';
+  canvas.dataset.tool = hc.tool;
+  hcLastUI = '';
+}
+function setTool(t) { hc.tool = t; hc.fire = false; hcRenderUI(); }
+document.querySelectorAll('.hc-tool').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
+document.querySelectorAll('.hc-types button').forEach((b) => b.addEventListener('click', () => { hc.addType = b.dataset.type; hcRenderUI(); }));
+$('#hc-new').addEventListener('click', () => { hcAdd(hc.addType); squishSound(hc.addType); });
+$('#hc-clean').addEventListener('click', clearSplats);
+$('#hc-back').addEventListener('click', exitHC);
+$('#go-hc').addEventListener('click', enterHC);
+$('#hc-sound').addEventListener('click', () => { state.sound = !state.sound; store.set('sound', state.sound); hcRenderUI(); renderPanel(); });
+
+function hcFit() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  hcCam.aspect = w / h;
+  const portrait = hcCam.aspect < 0.85;
+  hcCam.fov = portrait ? 52 : 42;
+  const k = Math.max(1, 1.1 / hcCam.aspect);
+  hcCamBase.set(0, 3.8 + (k - 1) * 0.8, 11.5 * Math.min(k, portrait ? 1.12 : 2.2) * (h < 520 ? 1.25 : 1));
+  // keep the squishy centred in the free space between the top controls and the weapon bar
+  const topEl = document.querySelector('.hc-top'), dockEl = document.querySelector('.hc-dock');
+  const tb = topEl ? topEl.getBoundingClientRect().bottom : 0, db = dockEl ? dockEl.getBoundingClientRect().top : h;
+  // on wide screens the title block sits in the top-left corner, so only the right-hand buttons limit the room's height
+  const rightEl = document.querySelector('.hc-right');
+  const roomTop = w >= 700 && h >= 520 && rightEl ? rightEl.getBoundingClientRect().bottom : tb;
+  const shift = db > tb ? h / 2 - (tb + db) / 2 : 0;
+  if (Math.abs(shift) > 1) hcCam.setViewOffset(w, h, 0, -shift, w, h); else hcCam.clearViewOffset();
+  hcCam.updateProjectionMatrix();
+  fitRoom(roomTop, db);
+  pMat.uniforms.uScale.value = renderer.getPixelRatio() * h * 1.3;
+}
+new ResizeObserver(() => { if (view === 'hc') hcFit(); }).observe(document.querySelector('.hc-top'));
+function enterHC() {
+  releaseAll(); view = 'hc';
+  top.hidden = true; panel.hidden = true; hint.hidden = true; tipsEl.hidden = true; hcEl.hidden = false;
+  canvas.classList.add('hc-canvas');
+  renderer.localClippingEnabled = true;
+  if (!hc.addType) hc.addType = state.type;
+  if (!hcList.length) hcAdd(hc.addType);
+  hcRenderUI(); hcFit();
+}
+function exitHC() {
+  view = 'shelf'; hc.fire = false; fireLoop(false); if (hc.grab) hcRelease();
+  top.hidden = false; panel.hidden = false; hint.hidden = false; tipsEl.hidden = false; hcEl.hidden = true;
+  canvas.classList.remove('hc-canvas', 'grabbing');
+  fit();
+}
+function hcPtr(e) { const r = canvas.getBoundingClientRect(); hc.ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1; hc.ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1; }
+function hcDown(e) {
+  audio();
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  hcPtr(e); aim();
+  const T = hcTargets(), hit = T.length ? ray.intersectObjects(T, false)[0] : null;
+  switch (hc.tool) {
+    case 'pin': if (hit) pin(hit); break;
+    case 'pistol': firePistol(); break;
+    case 'shotgun': fireShotgun(); break;
+    case 'bazooka': fireBazooka(); break;
+    case 'hammer': if (hit) hammer(hit); else sThud(0.4); break;
+    case 'axe': if (hit) axe(hit); break;
+    case 'flame': hc.fire = true; break;
+    case 'throw': if (hit) grab(hit); break;
+    case 'cracker': if (hit) plantCracker(hit); break;
+  }
+}
+function hcMove(e) {
+  hcPtr(e);
+  if (hc.grab) { aim(); const p = ray.ray.intersectPlane(grabPlane, new V3()); if (p) hc.grabTarget = p.sub(grabOff); }
+}
+function hcUp() { hc.fire = false; if (hc.grab) hcRelease(); }
+addEventListener('keydown', (e) => {
+  if (view !== 'hc' || (e.target.closest && e.target.closest('input'))) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= TOOLS.length) setTool(TOOLS[n - 1]);
+  else if (e.key === 'r' || e.key === 'R') hcResetRoom(hc.addType);
+  else if (e.key === 'Escape') exitHC();
+});
+
+/* ---------- boot ---------- */
+(async () => {
+  try { await Promise.race([document.fonts.load('800 100px Figtree'), new Promise((r) => setTimeout(r, 1500))]); } catch {}
+  Object.keys(TYPES).forEach(applyPreset);
+  renderCount(); renderPanel(); fit();
+  if (location.hash === '#hardcore') enterHC();
+  requestAnimationFrame((t) => { last = t; frame(t); });
+})();
+</script>
+
+</body>
+</html>
